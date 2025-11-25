@@ -1,0 +1,1366 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ultimateBroK
+
+//@version=6
+indicator('TA Table + Pivots', 'AIO_TAPP', overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 1000)
+
+//- TA table list
+// Oscillators, Moving Averages, Pivots
+
+// TA Helper
+ta_helper = 'Technical Analysis tool'
+tick      = syminfo.tickerid
+
+res = input.timeframe(title = 'Resolution', defval = '', tooltip = 'Select the resolution you want to track.', group = ta_helper)
+
+// === Cache HTF series for performance ===
+secOpen = request.security(tick, res, open)
+secHigh = request.security(tick, res, high)
+secLow  = request.security(tick, res, low)
+source  = request.security(tick, res, close)
+//@version=6
+indicator('TA Table + Pivots', 'AIO_TA_PP', overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 1000)
+
+//- TA table list
+// Oscillators, Moving Averages, Pivots
+
+// TA Helper
+ta_helper = 'Technical Analysis tool'
+tick      = syminfo.tickerid
+
+res = input.timeframe(title = 'Resolution', defval = '', tooltip = 'Select the resolution you want to track.', group = ta_helper)
+
+// === Cache HTF series for performance ===
+secOpen = request.security(tick, res, open)
+secHigh = request.security(tick, res, high)
+secLow  = request.security(tick, res, low)
+source  = request.security(tick, res, close)
+secHL2  = request.security(tick, res, hl2)
+secTR   = request.security(tick, res, ta.tr)
+
+// additional cached combos for Bull/Bear Power
+secHighLow  = request.security(tick, res, high - low)
+secHighOpen = request.security(tick, res, high - open)
+secOpenLow  = request.security(tick, res, open - low)
+
+////////////////////////////////////////////////////////////////////////////////
+//                              A. Oscillators                                //
+////////////////////////////////////////////////////////////////////////////////
+
+//1. Relative Strength Index (14)
+RSI(src, per) =>
+    len  = per
+    up   = ta.rma(math.max(ta.change(src), 0), len)
+    down = ta.rma(-math.min(ta.change(src), 0), len)
+    rsi  = down == 0 ? 100 : up == 0 ? 0 : 100 - 100 / (1 + up / down)
+    RSI  = rsi
+    RSI
+
+rsi_Sig = RSI(source, 14)
+
+//RSI Signal
+A1_red  = rsi_Sig < 30 ? 1 : 0
+A1_blue = rsi_Sig > 70 ? 1 : 0
+
+//2. Stochastic %K (14, 3, 3)
+STOCH(src, perK, perD, perS) =>
+    K      = perK
+    D      = perD
+    smooth = perS
+    hh     = ta.highest(secHigh, K)
+    ll     = ta.lowest(secLow, K)
+    k      = ta.sma((src - ll) / (hh - ll) * 100, smooth)
+    d      = ta.sma(k, D)
+    STOCH  = k
+    STOCH
+
+stoch_Sig = STOCH(source, 14, 3, 3)
+
+//STOCH Signal
+A2_red  = stoch_Sig < 20 ? 1 : 0
+A2_blue = stoch_Sig > 80 ? 1 : 0
+
+//3. Commodity Channel Index (20)
+CCI(src, per) =>
+    lengthcci1 = per
+    macci1     = ta.sma(src, lengthcci1)
+    cci1       = (src - macci1) / (0.015 * ta.dev(src, lengthcci1))
+    CCI        = cci1
+    CCI
+
+cci_Sig = CCI(source, 20)
+
+//CCI Signal
+A3_red  = cci_Sig < -100 ? 1 : 0
+A3_blue = cci_Sig > 100 ? 1 : 0
+
+//4. Average Directional Index (14)
+adxlen = 14
+dilen  = 14
+
+dirmov(len) =>
+    up         = ta.change(secHigh)
+    down       = -ta.change(secLow)
+    truerange  = ta.rma(secTR, len)
+    plus       = fixnan(100 * ta.rma(up > down and up > 0 ? up : 0, len) / truerange)
+    minus      = fixnan(100 * ta.rma(down > up and down > 0 ? down : 0, len) / truerange)
+    [plus, minus]
+
+ADX(dilen, adxlen) =>
+    [plus, minus] = dirmov(dilen)
+    sum           = plus + minus
+    ADX           = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), adxlen)
+    ADX
+
+adxHigh(dilen, adxlen) =>
+    [plus, minus] = dirmov(dilen)
+    plus
+
+adxLow(dilen, adxlen) =>
+    [plus, minus] = dirmov(dilen)
+    minus
+
+ADX_Sig  = ADX(dilen, adxlen)
+di_sigHigh = adxHigh(dilen, adxlen)
+di_sigLow  = adxLow(dilen, adxlen)
+
+//ADX Signal
+A4_red  = di_sigLow > di_sigHigh and ADX_Sig > 25 ? 1 : 0
+A4_blue = di_sigHigh > di_sigLow and ADX_Sig > 25 ? 1 : 0
+
+//5. Awesome Oscillator
+ao = ta.sma(secHL2, 5) - ta.sma(secHL2, 34)
+
+//AO Signal
+A5_red  = ao < 0 ? 1 : 0
+A5_blue = ao > 0 ? 1 : 0
+
+//6. Momentum (10)
+mom = source - source[10]
+
+//momentum Signal
+A6_red  = mom < 0 ? 1 : 0
+A6_blue = mom > 0 ? 1 : 0
+
+//7. MACD Level (12, 26)
+fast_ma = ta.ema(source, 12)
+slow_ma = ta.ema(source, 26)
+macd    = fast_ma - slow_ma
+signal  = ta.ema(macd, 9)
+hist    = macd - signal
+
+//MACD Signal
+A7_red  = hist < hist[1] ? 1 : 0
+A7_blue = hist > hist[1] ? 1 : 0
+
+//8. Stochastic RSI Fast (3, 3, 14, 14)
+rsi1 = ta.rsi(source, 14)
+rsik = ta.sma(ta.stoch(rsi1, rsi1, rsi1, 14), 3)
+rsid = ta.sma(rsik, 3)
+rsih0 = 80
+rsih1 = 20
+
+//Stoch RSI Signal
+A8_red  = rsik < rsih1 ? 1 : 0
+A8_blue = rsik > rsih0 ? 1 : 0
+
+//9. Williams Percent Range (14)
+upper = ta.highest(source, 14)
+lower = ta.lowest(source, 14)
+out   = 100 * (source - upper) / (upper - lower)
+rband1 = -20
+rband0 = -80
+
+// %R Signal
+A9_red  = out < rband0 ? 1 : 0
+A9_blue = out > rband1 ? 1 : 0
+
+//10. Bull bear Power
+Length = 30
+
+r1 = source[1] < secOpen ? math.max(secHighOpen - source[1], secHighLow) : secHighLow
+r2_1 = source[1] > secOpen ? math.max(source[1] - secOpen, secHighLow) : secHighLow
+
+iff_1  = source[1] > secOpen ? math.max(secHighLow, source - secLow) : r1
+iff_2  = source[1] < secOpen ? math.max(secHigh - source[1], source - secLow) : secHighOpen
+iff_3  = secHigh - source > source - secLow ? iff_2 : r1
+iff_4  = secHigh - source == source - secLow ? iff_1 : iff_3
+iff_5  = source[1] < secOpen ? math.max(secHigh - source[1], source - secLow) : math.max(secHighLow, source - secLow)
+iff_6  = source < secOpen ? iff_5 : r1
+bull   = source == secOpen ? iff_4 : iff_6
+
+iff_7  = source[1] < secOpen ? math.max(secOpenLow, secHigh - source) : r2_1
+iff_8  = source[1] > secOpen ? math.max(source[1] - secLow, secHigh - source) : secOpenLow
+iff_9  = secHigh - source > source - secLow ? r2_1 : iff_8
+iff_10 = secHigh - source == source - secLow ? iff_7 : iff_9
+iff_11 = source[1] > secOpen ? math.max(source[1] - secLow, secHigh - source) : math.max(secOpenLow, secHigh - source)
+iff_12 = source < secOpen ? r2_1 : iff_11
+bear   = source == secOpen ? iff_10 : iff_12
+
+// Bull bear Signal
+A10_red  = ta.sma(bull - bear, Length) < 0 ? 1 : 0
+A10_blue = ta.sma(bull - bear, Length) > 0 ? 1 : 0
+
+//11.Ultimate Oscillator (7, 14, 28)
+length7  = 7
+length14 = 14
+length28 = 28
+
+average(bp, tr_, length) =>
+    math.sum(bp, length) / math.sum(tr_, length)
+
+high_ = math.max(secHigh, source[1])
+low_  = math.min(secLow,  source[1])
+bp    = source - low_
+tr_   = high_ - low_
+
+avg7  = average(bp, tr_, length7)
+avg14 = average(bp, tr_, length14)
+avg28 = average(bp, tr_, length28)
+
+uoout = 100 * (4 * avg7 + 2 * avg14 + avg28) / 7
+
+// UO Signal
+A11_red  = uoout < 30 ? 1 : 0
+A11_blue = uoout > 70 ? 1 : 0
+
+//Sum Signal A
+A_red  = A1_red + A2_red + A3_red + A4_red + A5_red + A6_red + A7_red + A8_red + A9_red + A10_red + A11_red
+A_blue = A1_blue + A2_blue + A3_blue + A4_blue + A5_blue + A6_blue + A7_blue + A8_blue + A9_blue + A10_blue + A11_blue
+
+////////////////////////////////////////////////////////////////////////////////
+//                          B. Moving Averages                                //
+////////////////////////////////////////////////////////////////////////////////
+
+//1. EMA (5)
+B1_red  = source < ta.ema(source, 5) ? 1 : 0
+B1_blue = source > ta.ema(source, 5) ? 1 : 0
+
+//2. SMA (5)
+B2_red  = source < ta.sma(source, 5) ? 1 : 0
+B2_blue = source > ta.sma(source, 5) ? 1 : 0
+
+//3. EMA (10)
+B3_red  = source < ta.ema(source, 10) ? 1 : 0
+B3_blue = source > ta.ema(source, 10) ? 1 : 0
+
+//4. SMA (10)
+B4_red  = source < ta.sma(source, 10) ? 1 : 0
+B4_blue = source > ta.sma(source, 10) ? 1 : 0
+
+//5. EMA (21)
+B5_red  = source < ta.ema(source, 21) ? 1 : 0
+B5_blue = source > ta.ema(source, 21) ? 1 : 0
+
+//6. SMA (20)
+B6_red  = source < ta.sma(source, 20) ? 1 : 0
+B6_blue = source > ta.sma(source, 20) ? 1 : 0
+
+//7. EMA (30)
+B7_red  = source < ta.ema(source, 30) ? 1 : 0
+B7_blue = source > ta.ema(source, 30) ? 1 : 0
+
+//8. SMA (30)
+B8_red  = source < ta.sma(source, 30) ? 1 : 0
+B8_blue = source > ta.sma(source, 30) ? 1 : 0
+
+//9. EMA (55)
+B9_red  = source < ta.ema(source, 55) ? 1 : 0
+B9_blue = source > ta.ema(source, 55) ? 1 : 0
+
+//10. SMA (50)
+B10_red  = source < ta.sma(source, 50) ? 1 : 0
+B10_blue = source > ta.sma(source, 50) ? 1 : 0
+
+//11. EMA (100)
+B11_red  = source < ta.ema(source, 100) ? 1 : 0
+B11_blue = source > ta.ema(source, 100) ? 1 : 0
+
+//12. SMA (100)
+B12_red  = source < ta.sma(source, 100) ? 1 : 0
+B12_blue = source > ta.sma(source, 100) ? 1 : 0
+
+//13. EMA (200)
+B13_red  = source < ta.ema(source, 200) ? 1 : 0
+B13_blue = source > ta.ema(source, 200) ? 1 : 0
+
+//14. SMA (200)
+B14_red  = source < ta.sma(source, 200) ? 1 : 0
+B14_blue = source > ta.sma(source, 200) ? 1 : 0
+
+//15. Ichimoku Cloud Base Line (9, 26, 52, 26)
+donchian(len) =>
+    math.avg(ta.lowest(source, len), ta.highest(source, len))
+
+ichi_baseline = donchian(26)
+B15_red       = source < ichi_baseline ? 1 : 0
+B15_blue      = source > ichi_baseline ? 1 : 0
+
+//16. Volume Weighted Moving Average (20)
+B16_red  = source < ta.vwma(source, 20) ? 1 : 0
+B16_blue = source > ta.vwma(source, 20) ? 1 : 0
+
+//17. Hull Moving Average (9)
+B17_red  = source < ta.hma(source, 9) ? 1 : 0
+B17_blue = source > ta.hma(source, 9) ? 1 : 0
+
+//Sum Signal B
+B_red  = B1_red + B2_red + B3_red + B4_red + B5_red + B6_red + B7_red + B8_red + B9_red + B10_red + B11_red + B12_red + B13_red + B14_red + B15_red + B16_red + B17_red
+B_blue = B1_blue + B2_blue + B3_blue + B4_blue + B5_blue + B6_blue + B7_blue + B8_blue + B9_blue + B10_blue + B11_blue + B12_blue + B13_blue + B14_blue + B15_blue + B16_blue + B17_blue
+
+////////////////////////////////////////////////////////////////////////////////
+//                              C. Pivot (for TA table signals)                //
+////////////////////////////////////////////////////////////////////////////////
+
+// Function outputs 1 when it's the first bar of the D/W/M/Y
+is_newbar(res_) =>
+    ch = 0
+    if res_ == 'Y'
+        t  = year(time('D'))
+        ch := ta.change(t) != 0 ? 1 : 0
+        ch
+    else
+        t  = time(res_)
+        ch := ta.change(t) != 0 ? 1 : 0
+        ch
+    ch
+
+// Rounding levels to min tick
+nround(x) =>
+    n = math.round(x / syminfo.mintick) * syminfo.mintick
+    n
+
+//pp_res = 'D'
+pp_res = res
+
+// Get HLC from HT
+// Calc Open
+open_cur = 0.0
+open_cur := bool(is_newbar(pp_res)) ? secOpen : open_cur[1]
+popen    = 0.0
+popen    := bool(is_newbar(pp_res)) ? open_cur[1] : popen[1]
+
+// Calc High
+high_cur = 0.0
+high_cur := bool(is_newbar(pp_res)) ? secHigh : math.max(high_cur[1], secHigh)
+phigh    = 0.0
+phigh    := bool(is_newbar(pp_res)) ? high_cur[1] : phigh[1]
+
+// Calc Low
+low_cur = 0.0
+low_cur := bool(is_newbar(pp_res)) ? secLow : math.min(low_cur[1], secLow)
+plow    = 0.0
+plow    := bool(is_newbar(pp_res)) ? low_cur[1] : plow[1]
+
+// Calc source
+psource = 0.0
+psource := bool(is_newbar(pp_res)) ? source[1] : psource[1]
+
+// CALCULATE Pivot POINTS
+PP = 0.0
+R1 = 0.0
+R2 = 0.0
+R3 = 0.0
+S1 = 0.0
+S2 = 0.0
+S3 = 0.0
+
+// Traditional
+TR_PP = (phigh + plow + psource) / 3
+TR_R1 = TR_PP + TR_PP - plow
+TR_S1 = TR_PP - (phigh - TR_PP)
+TR_R2 = TR_PP + phigh - plow
+TR_S2 = TR_PP - (phigh - plow)
+TR_R3 = phigh + 2 * (TR_PP - plow)
+TR_S3 = plow - 2 * (phigh - TR_PP)
+
+//Signal
+C1_red  = source < TR_S1 and not ta.cross(source, TR_S2) or source < TR_S2 and not ta.cross(source, TR_S3) or source < TR_S3 and not ta.cross(secHigh, TR_S3) ? 1 : 0
+C1_blue = source > TR_R1 and not ta.cross(source, TR_R2) or source > TR_R2 and not ta.cross(source, TR_R3) or source > TR_R3 and not ta.cross(secLow, TR_R3) ? 1 : 0
+
+// Fibonacci
+FIB_PP = (phigh + plow + psource) / 3
+FIB_R1 = FIB_PP + (phigh - plow) * 0.382
+FIB_S1 = FIB_PP - (phigh - plow) * 0.382
+FIB_R2 = FIB_PP + (phigh - plow) * 0.618
+FIB_S2 = FIB_PP - (phigh - plow) * 0.618
+FIB_R3 = FIB_PP + (phigh - plow) * 1.000
+FIB_S3 = FIB_PP - (phigh - plow) * 1.000
+
+C2_red  = source < FIB_S1 and not ta.cross(source, FIB_S2) or source < FIB_S2 and not ta.cross(source, FIB_S3) or source < FIB_S3 and not ta.cross(secHigh, FIB_S3) ? 1 : 0
+C2_blue = source > FIB_R1 and not ta.cross(source, FIB_R2) or source > FIB_R2 and not ta.cross(source, FIB_R3) or source > FIB_R3 and not ta.cross(secLow, FIB_R3) ? 1 : 0
+
+// Woodie
+WO_PP = (phigh + plow + 2 * popen) / 4
+WO_R1 = WO_PP + WO_PP - plow
+WO_S1 = WO_PP - (phigh - WO_PP)
+WO_R2 = WO_PP + phigh - plow
+WO_S2 = WO_PP - (phigh - plow)
+WO_R3 = phigh + 2 * (WO_PP - plow)
+WO_S3 = plow - 2 * (phigh - WO_PP)
+
+C3_red  = source < WO_S1 and not ta.cross(source, WO_S2) or source < WO_S2 and not ta.cross(source, WO_S3) or source < WO_S3 and not ta.cross(secHigh, WO_S3) ? 1 : 0
+C3_blue = source > WO_R1 and not ta.cross(source, WO_R2) or source > WO_R2 and not ta.cross(source, WO_R3) or source > WO_R3 and not ta.cross(secLow, WO_R3) ? 1 : 0
+
+// Camarilla
+CA_PP = (phigh + plow + psource) / 3
+CA_R1 = psource + (phigh - plow) * 1.1 / 12
+CA_S1 = psource - (phigh - plow) * 1.1 / 12
+CA_R2 = psource + (phigh - plow) * 1.1 / 6
+CA_S2 = psource - (phigh - plow) * 1.1 / 6
+CA_R3 = psource + (phigh - plow) * 1.1 / 4
+CA_S3 = psource - (phigh - plow) * 1.1 / 4
+
+C4_red  = source < CA_S1 and not ta.cross(source, CA_S2) or source < CA_S2 and not ta.cross(source, CA_S3) or source < CA_S3 and not ta.cross(secHigh, CA_S3) ? 1 : 0
+C4_blue = source > CA_R1 and not ta.cross(source, CA_R2) or source > CA_R2 and not ta.cross(source, CA_R3) or source > CA_R3 and not ta.cross(secLow, CA_R3) ? 1 : 0
+
+//C Point
+C_red  = C1_red + C2_red + C3_red + C4_red
+C_blue = C1_blue + C2_blue + C3_blue + C4_blue
+
+//Sum point
+Sum_red  = A_red + B_red + C_red
+Sum_blue = A_blue + B_blue + C_blue
+
+sell_point = Sum_red / 32 * 10
+buy_point  = Sum_blue / 32 * 10
+
+////////////////////////////////////////////////////////////////////////////////
+//                                Market Level & TA Table                      //
+////////////////////////////////////////////////////////////////////////////////
+
+sell        = Sum_red > Sum_blue and sell_point > 5 ? 22 : na
+Strong_sell = A_red > A_blue and B_red > B_blue and C_red > C_blue and sell_point > 5 and not ta.crossunder(sell_point, 7.5) ? 22 : na
+buy         = Sum_red < Sum_blue and buy_point > 5 ? 22 : na
+Strong_buy  = A_red < A_blue and B_red < B_blue and C_red < C_blue and buy_point > 5 and not ta.crossunder(buy_point, 7.5) ? 22 : na
+neutral     = bool(sell) and bool(Strong_sell) and bool(buy) and bool(Strong_buy) ? 22 : na
+
+// Set the position of the table
+posInput = input.string(title = 'Position', defval = 'Bottom Right', options = ['Bottom Left', 'Bottom Right', 'Top Left', 'Top Right'], tooltip = 'Select where you want the table to draw.', group = ta_helper)
+var pos  = posInput == 'Bottom Left' ? position.bottom_left : posInput == 'Bottom Right' ? position.bottom_right : posInput == 'Top Left' ? position.top_left : posInput == 'Top Right' ? position.top_right : na
+
+// Adjusts the text size and results in different overall size of the table
+txtSizeInput = input.string(title = 'Text Size', defval = 'Auto', options = ['Tiny', 'Small', 'Normal', 'Large', 'Huge', 'Auto'], tooltip = 'Select the size of the text. It affects the size of the whole table.', group = ta_helper)
+var txtSize  = txtSizeInput == 'Tiny' ? size.tiny : txtSizeInput == 'Small' ? size.small : txtSizeInput == 'Normal' ? size.normal : txtSizeInput == 'Large' ? size.large : txtSizeInput == 'Huge' ? size.huge : txtSizeInput == 'Auto' ? size.auto : na
+
+// Background color for Pivots, Oscillators, MAs, and Summary
+pivBgColor = input.color(title = 'Pivots Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Pivots columns.', group = ta_helper)
+oscBgColor = input.color(title = 'Oscillators Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Oscillators columns.', group = ta_helper)
+maBgColor  = input.color(title = 'Moving Averages Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Moving Averages columns.', group = ta_helper)
+sumBgColor = input.color(title = 'Summary Background Color', defval = #282828bf, tooltip = 'Background color for the Summary columns.', group = ta_helper)
+
+// Background color for the final suggestion
+ssBgColor = input.color(title = 'Strong Sell Background Color', defval = #5d1616, tooltip = 'Background color for the Strong Sell signal.', group = ta_helper)
+sBgColor  = input.color(title = 'Sell Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Sell signal.', group = ta_helper)
+nBgColor  = input.color(title = 'Neutral Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Neutral signal.', group = ta_helper)
+bBgColor  = input.color(title = 'Buy Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Buy signal.', group = ta_helper)
+sbBgColor = input.color(title = 'Strong Buy Background Color', defval = #194616, tooltip = 'Background color for the Strong Buy signal.', group = ta_helper)
+
+// Background color for the pseudohistogram
+negBgColor = input.color(title = 'Sell % Background Color', defval = #5d1616, tooltip = 'Background color for the Sell %.', group = ta_helper)
+netBgColor = input.color(title = 'Neutral % Background Color', defval = #164646, tooltip = 'Background color for the Neutral %.', group = ta_helper)
+posBgColor = input.color(title = 'Buy % Background Color', defval = #194616, tooltip = 'Background color for the Buy %.', group = ta_helper)
+
+// Print Symbol name
+symbol_name = str.tostring(tick)
+get_sym_name = array.get(str.split(symbol_name, ':'), 1)
+
+// Initiate the table
+var table TA_Display = table.new(pos, 5, 6, frame_width = 2, frame_color = #00FFAA)
+
+// Final suggestion / Summary
+if barstate.islast
+    table.cell(TA_Display, 1, 1, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 2, 1, 'Summary' + '-' + get_sym_name, text_color = color.white, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 3, 1, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 1, 2, str.tostring(Sum_red), text_color = #ff1100, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 2, 2, str.tostring(32 - (Sum_red + Sum_blue)), text_color = #52ffe8, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 3, 2, str.tostring(Sum_blue), text_color = #00ffbb, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+
+// Pseudohistogram
+if barstate.isrealtime
+    table.cell(TA_Display, 1, 3, text_color = #ff4500, text_size = txtSize, bgcolor = negBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 1, 4, str.tostring(sell_point * 10) + '%', text_color = #ff4500, text_size = txtSize, bgcolor = negBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 1, 5, text_color = #ff4500, text_size = txtSize, bgcolor = negBgColor, text_font_family = font.family_monospace)
+
+    table.cell(TA_Display, 2, 3, text_color = #52ffe8, text_size = txtSize, bgcolor = netBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 2, 4, str.tostring((10 - sell_point - buy_point) * 10) + '%', text_color = #52ffe8, text_size = txtSize, bgcolor = netBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 2, 5, text_color = #52ffe8, text_size = txtSize, bgcolor = netBgColor, text_font_family = font.family_monospace)
+
+    table.cell(TA_Display, 3, 3, text_color = #00ff00, text_size = txtSize, bgcolor = posBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 3, 4, str.tostring(buy_point * 10) + '%', text_color = #00ff00, text_size = txtSize, bgcolor = posBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 3, 5, text_color = #00ff00, text_size = txtSize, bgcolor = posBgColor, text_font_family = font.family_monospace)
+
+    if bool(neutral)
+        for i = 1 to 5 by 1
+            table.cell(TA_Display, 4, i, text_color = #52ffe8, text_size = txtSize, bgcolor = nBgColor, text_font_family = font.family_monospace)
+        table.cell_set_text(TA_Display, 4, 3, 'NEUTRAL')
+
+    if sell_point > buy_point
+        if bool(sell) and bool(Strong_sell)
+            for i = 1 to 5 by 1
+                table.cell(TA_Display, 4, i, text_color = #ff4500, text_size = txtSize, bgcolor = sBgColor, text_font_family = font.family_monospace)
+            table.cell_set_text(TA_Display, 4, 3, 'SELL') //Sell
+
+        if bool(Strong_sell)
+            for i = 1 to 5 by 1
+                table.cell(TA_Display, 4, i, text_color = #ff4500, text_size = txtSize, bgcolor = ssBgColor, text_font_family = font.family_monospace)
+            table.cell_set_text(TA_Display, 4, 3, 'SELL+') //Strong Sell            
+
+    else
+        if bool(buy) and bool(Strong_buy)
+            for i = 1 to 5 by 1
+                table.cell(TA_Display, 4, i, text_color = #00ffbb, text_size = txtSize, bgcolor = bBgColor, text_font_family = font.family_monospace)
+            table.cell_set_text(TA_Display, 4, 3, 'BUY') //Buy
+
+        if bool(Strong_buy)
+            for i = 1 to 5 by 1
+                table.cell(TA_Display, 4, i, text_color = #00ff00, text_size = txtSize, bgcolor = sbBgColor, text_font_family = font.family_monospace)
+            table.cell_set_text(TA_Display, 4, 3, 'BUY+') //Strong Buy
+
+// EOF TA table
+
+// Pivot Points (built-in multi‑TF pivots)
+pivotTypeInput          = input.string(title="Type", defval="Traditional", options=["Traditional", "Fibonacci", "Woodie", "Classic", "DM", "Camarilla"])
+pivotAnchorInput        = input.string(title="Pivots Timeframe", defval="Auto", options=["Auto", "Daily", "Weekly", "Monthly", "Quarterly", "Yearly", "Biyearly", "Triyearly", "Quinquennially", "Decennially"])
+maxHistoricalPivotsInput = input.int(title="Number of Pivots Back", defval=15, minval=1, maxval=200, display = display.data_window)
+isDailyBasedInput       = input.bool(title="Use Daily-based Values", defval=true, display = display.data_window, tooltip="When this option is unchecked, Pivot Points will use intraday data while calculating on intraday charts. If Extended Hours are displayed on the chart, they will be taken into account during the pivot level calculation. If intraday OHLC values are different from daily-based values (normal for stocks), the pivot levels will also differ.")
+showLabelsInput         = input.bool(title="Show Labels", defval=true, group="labels", display = display.data_window)
+showPricesInput         = input.bool(title="Show Prices", defval=true, group="labels", display = display.data_window)
+positionLabelsInput     = input.string("Left", "Labels Position", options=["Left", "Right"], group="labels", display = display.data_window)
+linewidthInput          = input.int(title="Line Width", defval=3, minval=1, maxval=100, group="levels", display = display.data_window)
+
+DEFAULT_COLOR   = #FB8C00
+DEFAULT_COLOR_R = #0077ff
+DEFAULT_COLOR_S = #FF1100
+
+pColorInput  = input.color(DEFAULT_COLOR, "P‏  ‏  ‏", inline="P", group="levels", display = display.data_window)
+pShowInput   = input.bool(true, "", inline="P", group="levels", display = display.data_window)
+s1ColorInput = input.color(DEFAULT_COLOR_S, "S1", inline="S1/R1" , group="levels", display = display.data_window)
+s1ShowInput  = input.bool(true, "", inline="S1/R1", group="levels", display = display.data_window)
+r1ColorInput = input.color(DEFAULT_COLOR_R, "‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏R1", inline="S1/R1", group="levels", display = display.data_window)
+r1ShowInput  = input.bool(true, "", inline="S1/R1", group="levels", display = display.data_window)
+
+s2ColorInput = input.color(DEFAULT_COLOR_S, "S2", inline="S2/R2", group="levels", display = display.data_window)
+s2ShowInput  = input.bool(true, "", inline="S2/R2", group="levels", display = display.data_window)
+r2ColorInput = input.color(DEFAULT_COLOR_R, "‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏R2", inline="S2/R2", group="levels", display = display.data_window)
+r2ShowInput  = input.bool(true, "", inline="S2/R2", group="levels", tooltip = "Not applicable to DM", display = display.data_window)
+
+s3ColorInput = input.color(DEFAULT_COLOR_S, "S3", inline="S3/R3", group="levels", display = display.data_window)
+s3ShowInput  = input.bool(true, "", inline="S3/R3", group="levels", display = display.data_window)
+r3ColorInput = input.color(DEFAULT_COLOR_R, "‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏R3", inline="S3/R3", group="levels", display = display.data_window)
+r3ShowInput  = input.bool(true, "", inline="S3/R3", group="levels", tooltip = "Not applicable to DM", display = display.data_window)
+
+s4ColorInput = input.color(DEFAULT_COLOR_S, "S4", inline="S4/R4", group="levels", display = display.data_window)
+s4ShowInput  = input.bool(true, "", inline="S4/R4", group="levels", display = display.data_window)
+r4ColorInput = input.color(DEFAULT_COLOR_R, "‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏R4", inline="S4/R4", group="levels", display = display.data_window)
+r4ShowInput  = input.bool(true, "", inline="S4/R4", group="levels", tooltip = "Not applicable to: Fibonacci, DM", display = display.data_window)
+
+s5ColorInput = input.color(DEFAULT_COLOR_S, "S5", inline="S5/R5", group="levels", display = display.data_window)
+s5ShowInput  = input.bool(true, "", inline="S5/R5", group="levels", display = display.data_window)
+r5ColorInput = input.color(DEFAULT_COLOR_R, "‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏R5", inline="S5/R5", group="levels", display = display.data_window)
+r5ShowInput  = input.bool(true, "", inline="S5/R5", group="levels", tooltip = "Not applicable to: Fibonacci, Woodie, Classic, DM", display = display.data_window)
+
+type graphicSettings
+    string levelName
+    color  levelColor
+    bool   showLevel
+
+var graphicSettingsArray = array.from(
+      graphicSettings.new(" P", pColorInput, pShowInput),
+      graphicSettings.new("R1", r1ColorInput, r1ShowInput), graphicSettings.new("S1", s1ColorInput, s1ShowInput),
+      graphicSettings.new("R2", r2ColorInput, r2ShowInput), graphicSettings.new("S2", s2ColorInput, s2ShowInput),
+      graphicSettings.new("R3", r3ColorInput, r3ShowInput), graphicSettings.new("S3", s3ColorInput, s3ShowInput),
+      graphicSettings.new("R4", r4ColorInput, r4ShowInput), graphicSettings.new("S4", s4ColorInput, s4ShowInput),
+      graphicSettings.new("R5", r5ColorInput, r5ShowInput), graphicSettings.new("S5", s5ColorInput, s5ShowInput))
+
+autoAnchor = switch
+    timeframe.isintraday => timeframe.multiplier <= 15 ? "1D" : "1W"
+    timeframe.isdaily    => "1M"
+    => "12M"
+
+pivotTimeframe = switch pivotAnchorInput
+    "Auto"      => autoAnchor
+    "Daily"     => "1D"
+    "Weekly"    => "1W"
+    "Monthly"   => "1M"
+    "Quarterly" => "3M"
+    => "12M"
+
+//@variable The number of years in the selected Pivot period
+pivotYearMultiplier = switch pivotAnchorInput
+    "Biyearly"       => 2
+    "Triyearly"      => 3
+    "Quinquennially" => 5
+    "Decennially"    => 10
+    => 1
+
+//@variable The number of values in the pivots of the selected type
+numOfPivotLevels = switch pivotTypeInput
+    "Traditional" => 11
+    "Camarilla"   => 11
+    "Woodie"      => 9
+    "Classic"     => 9
+    "Fibonacci"   => 7
+    "DM"          => 3
+
+type pivotGraphic
+    line  pivotLine
+    label pivotLabel
+
+method delete(pivotGraphic graphic) =>
+    graphic.pivotLine.delete()
+    graphic.pivotLabel.delete()
+
+var drawnGraphics = matrix.new<pivotGraphic>()
+
+localPivotTimeframeChange   = timeframe.change(pivotTimeframe) and year % pivotYearMultiplier == 0
+securityPivotTimeframeChange = timeframe.change(timeframe.period) and year % pivotYearMultiplier == 0
+
+pivotTimeframeChangeCounter(condition) => 
+    var count = 0
+    if condition and bar_index > 0
+        count += 1
+    count
+
+localPivots             = ta.pivot_point_levels(pivotTypeInput, localPivotTimeframeChange)
+securityPivotPointsArray = ta.pivot_point_levels(pivotTypeInput, securityPivotTimeframeChange)
+securityTimeframe       = timeframe.isintraday ? "1D" : timeframe.period
+
+[securityPivots, securityPivotCounter] = request.security(syminfo.tickerid, pivotTimeframe, [securityPivotPointsArray, pivotTimeframeChangeCounter(securityPivotTimeframeChange)], lookahead = barmerge.lookahead_on)
+
+pivotPointsArray = isDailyBasedInput ? securityPivots : localPivots
+
+//@function Sets the ending points of the currently active pivots to `endTime`.
+affixOldPivots(endTime) =>
+    if drawnGraphics.rows() > 0
+        lastGraphics = drawnGraphics.row(drawnGraphics.rows() - 1)
+        for graphic in lastGraphics
+            graphic.pivotLine.set_x2(endTime)
+            if positionLabelsInput == "Right"
+                graphic.pivotLabel.set_x(endTime)
+
+//@function Draws pivot lines and labels from `startTime` to the approximate end of the period.
+drawNewPivots(startTime) =>
+    newGraphics = array.new<pivotGraphic>()
+    for [index, coord] in pivotPointsArray
+        levelSettings = graphicSettingsArray.get(index)
+        if not na(coord) and levelSettings.showLevel
+            lineEndTime = startTime + timeframe.in_seconds(pivotTimeframe) * 1000 * pivotYearMultiplier
+
+            // Pivot line
+            pivotLine = line.new(startTime, coord, lineEndTime, coord,
+                                 xloc = xloc.bar_time,
+                                 color = levelSettings.levelColor,
+                                 width = linewidthInput)
+
+            // Compute label parameters separately (no nested ternaries in the call)
+            xPos     = positionLabelsInput == "Left" ? startTime : lineEndTime
+            lblText  = (showLabelsInput ? levelSettings.levelName + " " : "") +
+                       (showPricesInput ? "(" + str.tostring(coord, format.mintick) + ")" : "")
+            lblStyle = positionLabelsInput == "Left" ? label.style_label_right : label.style_label_left
+
+            pivotLabel = label.new(x = xPos,
+                                   y = coord,
+                                   text = lblText,
+                                   style = lblStyle,
+                                   textcolor = levelSettings.levelColor,
+                                   color = #00000000,
+                                   xloc = xloc.bar_time)
+
+            newGraphics.push(pivotGraphic.new(pivotLine, pivotLabel))
+
+    drawnGraphics.add_row(array_id = newGraphics)
+    if drawnGraphics.rows() > maxHistoricalPivotsInput
+        oldGraphics = drawnGraphics.remove_row(0)
+        for graphic in oldGraphics
+            graphic.delete()
+
+localPivotDrawConditionStatic    = not isDailyBasedInput and localPivotTimeframeChange
+securityPivotDrawConditionStatic = isDailyBasedInput and securityPivotCounter != securityPivotCounter[1]
+
+var isMultiYearly = array.from("Biyearly", "Triyearly", "Quinquennially", "Decennially").includes(pivotAnchorInput)
+
+localPivotDrawConditionDeveloping    = not isDailyBasedInput and time_close == time_close(pivotTimeframe) and not isMultiYearly 
+securityPivotDrawConditionDeveloping = false
+
+if (securityPivotDrawConditionStatic or localPivotDrawConditionStatic)
+    affixOldPivots(time)
+    drawNewPivots(time)
+
+// If possible, draw pivots from the beginning of the chart if none were found
+var FIRST_BAR_TIME = time
+
+if (barstate.islastconfirmedhistory and drawnGraphics.columns() == 0)
+    if not na(securityPivots) and securityPivotCounter > 0
+        if isDailyBasedInput
+            drawNewPivots(FIRST_BAR_TIME)
+        else 
+            runtime.error("Not enough intraday data to calculate Pivot Points. Lower the Pivots Timeframe or turn on the 'Use Daily-based Values' option in the indicator settings.")
+    else
+        runtime.error("Not enough data to calculate Pivot Points. Lower the Pivots Timeframe in the indicator settings.")
+
+secTR   = request.security(tick, res, ta.tr)
+
+// additional cached combos for Bull/Bear Power
+secHighLow  = request.security(tick, res, high - low)
+secHighOpen = request.security(tick, res, high - open)
+secOpenLow  = request.security(tick, res, open - low)
+
+////////////////////////////////////////////////////////////////////////////////
+//                              A. Oscillators                                //
+////////////////////////////////////////////////////////////////////////////////
+
+//1. Relative Strength Index (14)
+RSI(src, per) =>
+    len  = per
+    up   = ta.rma(math.max(ta.change(src), 0), len)
+    down = ta.rma(-math.min(ta.change(src), 0), len)
+    rsi  = down == 0 ? 100 : up == 0 ? 0 : 100 - 100 / (1 + up / down)
+    RSI  = rsi
+    RSI
+
+rsi_Sig = RSI(source, 14)
+
+//RSI Signal
+A1_red  = rsi_Sig < 30 ? 1 : 0
+A1_blue = rsi_Sig > 70 ? 1 : 0
+
+//2. Stochastic %K (14, 3, 3)
+STOCH(src, perK, perD, perS) =>
+    K      = perK
+    D      = perD
+    smooth = perS
+    hh     = ta.highest(secHigh, K)
+    ll     = ta.lowest(secLow, K)
+    k      = ta.sma((src - ll) / (hh - ll) * 100, smooth)
+    d      = ta.sma(k, D)
+    STOCH  = k
+    STOCH
+
+stoch_Sig = STOCH(source, 14, 3, 3)
+
+//STOCH Signal
+A2_red  = stoch_Sig < 20 ? 1 : 0
+A2_blue = stoch_Sig > 80 ? 1 : 0
+
+//3. Commodity Channel Index (20)
+CCI(src, per) =>
+    lengthcci1 = per
+    macci1     = ta.sma(src, lengthcci1)
+    cci1       = (src - macci1) / (0.015 * ta.dev(src, lengthcci1))
+    CCI        = cci1
+    CCI
+
+cci_Sig = CCI(source, 20)
+
+//CCI Signal
+A3_red  = cci_Sig < -100 ? 1 : 0
+A3_blue = cci_Sig > 100 ? 1 : 0
+
+//4. Average Directional Index (14)
+adxlen = 14
+dilen  = 14
+
+dirmov(len) =>
+    up         = ta.change(secHigh)
+    down       = -ta.change(secLow)
+    truerange  = ta.rma(secTR, len)
+    plus       = fixnan(100 * ta.rma(up > down and up > 0 ? up : 0, len) / truerange)
+    minus      = fixnan(100 * ta.rma(down > up and down > 0 ? down : 0, len) / truerange)
+    [plus, minus]
+
+ADX(dilen, adxlen) =>
+    [plus, minus] = dirmov(dilen)
+    sum           = plus + minus
+    ADX           = 100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), adxlen)
+    ADX
+
+adxHigh(dilen, adxlen) =>
+    [plus, minus] = dirmov(dilen)
+    plus
+
+adxLow(dilen, adxlen) =>
+    [plus, minus] = dirmov(dilen)
+    minus
+
+ADX_Sig  = ADX(dilen, adxlen)
+di_sigHigh = adxHigh(dilen, adxlen)
+di_sigLow  = adxLow(dilen, adxlen)
+
+//ADX Signal
+A4_red  = di_sigLow > di_sigHigh and ADX_Sig > 25 ? 1 : 0
+A4_blue = di_sigHigh > di_sigLow and ADX_Sig > 25 ? 1 : 0
+
+//5. Awesome Oscillator
+ao = ta.sma(secHL2, 5) - ta.sma(secHL2, 34)
+
+//AO Signal
+A5_red  = ao < 0 ? 1 : 0
+A5_blue = ao > 0 ? 1 : 0
+
+//6. Momentum (10)
+mom = source - source[10]
+
+//momentum Signal
+A6_red  = mom < 0 ? 1 : 0
+A6_blue = mom > 0 ? 1 : 0
+
+//7. MACD Level (12, 26)
+fast_ma = ta.ema(source, 12)
+slow_ma = ta.ema(source, 26)
+macd    = fast_ma - slow_ma
+signal  = ta.ema(macd, 9)
+hist    = macd - signal
+
+//MACD Signal
+A7_red  = hist < hist[1] ? 1 : 0
+A7_blue = hist > hist[1] ? 1 : 0
+
+//8. Stochastic RSI Fast (3, 3, 14, 14)
+rsi1 = ta.rsi(source, 14)
+rsik = ta.sma(ta.stoch(rsi1, rsi1, rsi1, 14), 3)
+rsid = ta.sma(rsik, 3)
+rsih0 = 80
+rsih1 = 20
+
+//Stoch RSI Signal
+A8_red  = rsik < rsih1 ? 1 : 0
+A8_blue = rsik > rsih0 ? 1 : 0
+
+//9. Williams Percent Range (14)
+upper = ta.highest(source, 14)
+lower = ta.lowest(source, 14)
+out   = 100 * (source - upper) / (upper - lower)
+rband1 = -20
+rband0 = -80
+
+// %R Signal
+A9_red  = out < rband0 ? 1 : 0
+A9_blue = out > rband1 ? 1 : 0
+
+//10. Bull bear Power
+Length = 30
+
+r1 = source[1] < secOpen ? math.max(secHighOpen - source[1], secHighLow) : secHighLow
+r2_1 = source[1] > secOpen ? math.max(source[1] - secOpen, secHighLow) : secHighLow
+
+iff_1  = source[1] > secOpen ? math.max(secHighLow, source - secLow) : r1
+iff_2  = source[1] < secOpen ? math.max(secHigh - source[1], source - secLow) : secHighOpen
+iff_3  = secHigh - source > source - secLow ? iff_2 : r1
+iff_4  = secHigh - source == source - secLow ? iff_1 : iff_3
+iff_5  = source[1] < secOpen ? math.max(secHigh - source[1], source - secLow) : math.max(secHighLow, source - secLow)
+iff_6  = source < secOpen ? iff_5 : r1
+bull   = source == secOpen ? iff_4 : iff_6
+
+iff_7  = source[1] < secOpen ? math.max(secOpenLow, secHigh - source) : r2_1
+iff_8  = source[1] > secOpen ? math.max(source[1] - secLow, secHigh - source) : secOpenLow
+iff_9  = secHigh - source > source - secLow ? r2_1 : iff_8
+iff_10 = secHigh - source == source - secLow ? iff_7 : iff_9
+iff_11 = source[1] > secOpen ? math.max(source[1] - secLow, secHigh - source) : math.max(secOpenLow, secHigh - source)
+iff_12 = source < secOpen ? r2_1 : iff_11
+bear   = source == secOpen ? iff_10 : iff_12
+
+// Bull bear Signal
+A10_red  = ta.sma(bull - bear, Length) < 0 ? 1 : 0
+A10_blue = ta.sma(bull - bear, Length) > 0 ? 1 : 0
+
+//11.Ultimate Oscillator (7, 14, 28)
+length7  = 7
+length14 = 14
+length28 = 28
+
+average(bp, tr_, length) =>
+    math.sum(bp, length) / math.sum(tr_, length)
+
+high_ = math.max(secHigh, source[1])
+low_  = math.min(secLow,  source[1])
+bp    = source - low_
+tr_   = high_ - low_
+
+avg7  = average(bp, tr_, length7)
+avg14 = average(bp, tr_, length14)
+avg28 = average(bp, tr_, length28)
+
+uoout = 100 * (4 * avg7 + 2 * avg14 + avg28) / 7
+
+// UO Signal
+A11_red  = uoout < 30 ? 1 : 0
+A11_blue = uoout > 70 ? 1 : 0
+
+//Sum Signal A
+A_red  = A1_red + A2_red + A3_red + A4_red + A5_red + A6_red + A7_red + A8_red + A9_red + A10_red + A11_red
+A_blue = A1_blue + A2_blue + A3_blue + A4_blue + A5_blue + A6_blue + A7_blue + A8_blue + A9_blue + A10_blue + A11_blue
+
+////////////////////////////////////////////////////////////////////////////////
+//                          B. Moving Averages                                //
+////////////////////////////////////////////////////////////////////////////////
+
+//1. EMA (5)
+B1_red  = source < ta.ema(source, 5) ? 1 : 0
+B1_blue = source > ta.ema(source, 5) ? 1 : 0
+
+//2. SMA (5)
+B2_red  = source < ta.sma(source, 5) ? 1 : 0
+B2_blue = source > ta.sma(source, 5) ? 1 : 0
+
+//3. EMA (10)
+B3_red  = source < ta.ema(source, 10) ? 1 : 0
+B3_blue = source > ta.ema(source, 10) ? 1 : 0
+
+//4. SMA (10)
+B4_red  = source < ta.sma(source, 10) ? 1 : 0
+B4_blue = source > ta.sma(source, 10) ? 1 : 0
+
+//5. EMA (21)
+B5_red  = source < ta.ema(source, 21) ? 1 : 0
+B5_blue = source > ta.ema(source, 21) ? 1 : 0
+
+//6. SMA (20)
+B6_red  = source < ta.sma(source, 20) ? 1 : 0
+B6_blue = source > ta.sma(source, 20) ? 1 : 0
+
+//7. EMA (30)
+B7_red  = source < ta.ema(source, 30) ? 1 : 0
+B7_blue = source > ta.ema(source, 30) ? 1 : 0
+
+//8. SMA (30)
+B8_red  = source < ta.sma(source, 30) ? 1 : 0
+B8_blue = source > ta.sma(source, 30) ? 1 : 0
+
+//9. EMA (55)
+B9_red  = source < ta.ema(source, 55) ? 1 : 0
+B9_blue = source > ta.ema(source, 55) ? 1 : 0
+
+//10. SMA (50)
+B10_red  = source < ta.sma(source, 50) ? 1 : 0
+B10_blue = source > ta.sma(source, 50) ? 1 : 0
+
+//11. EMA (100)
+B11_red  = source < ta.ema(source, 100) ? 1 : 0
+B11_blue = source > ta.ema(source, 100) ? 1 : 0
+
+//12. SMA (100)
+B12_red  = source < ta.sma(source, 100) ? 1 : 0
+B12_blue = source > ta.sma(source, 100) ? 1 : 0
+
+//13. EMA (200)
+B13_red  = source < ta.ema(source, 200) ? 1 : 0
+B13_blue = source > ta.ema(source, 200) ? 1 : 0
+
+//14. SMA (200)
+B14_red  = source < ta.sma(source, 200) ? 1 : 0
+B14_blue = source > ta.sma(source, 200) ? 1 : 0
+
+//15. Ichimoku Cloud Base Line (9, 26, 52, 26)
+donchian(len) =>
+    math.avg(ta.lowest(source, len), ta.highest(source, len))
+
+ichi_baseline = donchian(26)
+B15_red       = source < ichi_baseline ? 1 : 0
+B15_blue      = source > ichi_baseline ? 1 : 0
+
+//16. Volume Weighted Moving Average (20)
+B16_red  = source < ta.vwma(source, 20) ? 1 : 0
+B16_blue = source > ta.vwma(source, 20) ? 1 : 0
+
+//17. Hull Moving Average (9)
+B17_red  = source < ta.hma(source, 9) ? 1 : 0
+B17_blue = source > ta.hma(source, 9) ? 1 : 0
+
+//Sum Signal B
+B_red  = B1_red + B2_red + B3_red + B4_red + B5_red + B6_red + B7_red + B8_red + B9_red + B10_red + B11_red + B12_red + B13_red + B14_red + B15_red + B16_red + B17_red
+B_blue = B1_blue + B2_blue + B3_blue + B4_blue + B5_blue + B6_blue + B7_blue + B8_blue + B9_blue + B10_blue + B11_blue + B12_blue + B13_blue + B14_blue + B15_blue + B16_blue + B17_blue
+
+////////////////////////////////////////////////////////////////////////////////
+//                              C. Pivot (for TA table signals)                //
+////////////////////////////////////////////////////////////////////////////////
+
+// Function outputs 1 when it's the first bar of the D/W/M/Y
+is_newbar(res_) =>
+    ch = 0
+    if res_ == 'Y'
+        t  = year(time('D'))
+        ch := ta.change(t) != 0 ? 1 : 0
+        ch
+    else
+        t  = time(res_)
+        ch := ta.change(t) != 0 ? 1 : 0
+        ch
+    ch
+
+// Rounding levels to min tick
+nround(x) =>
+    n = math.round(x / syminfo.mintick) * syminfo.mintick
+    n
+
+//pp_res = 'D'
+pp_res = res
+
+// Get HLC from HT
+// Calc Open
+open_cur = 0.0
+open_cur := bool(is_newbar(pp_res)) ? secOpen : open_cur[1]
+popen    = 0.0
+popen    := bool(is_newbar(pp_res)) ? open_cur[1] : popen[1]
+
+// Calc High
+high_cur = 0.0
+high_cur := bool(is_newbar(pp_res)) ? secHigh : math.max(high_cur[1], secHigh)
+phigh    = 0.0
+phigh    := bool(is_newbar(pp_res)) ? high_cur[1] : phigh[1]
+
+// Calc Low
+low_cur = 0.0
+low_cur := bool(is_newbar(pp_res)) ? secLow : math.min(low_cur[1], secLow)
+plow    = 0.0
+plow    := bool(is_newbar(pp_res)) ? low_cur[1] : plow[1]
+
+// Calc source
+psource = 0.0
+psource := bool(is_newbar(pp_res)) ? source[1] : psource[1]
+
+// CALCULATE Pivot POINTS
+PP = 0.0
+R1 = 0.0
+R2 = 0.0
+R3 = 0.0
+S1 = 0.0
+S2 = 0.0
+S3 = 0.0
+
+// Traditional
+TR_PP = (phigh + plow + psource) / 3
+TR_R1 = TR_PP + TR_PP - plow
+TR_S1 = TR_PP - (phigh - TR_PP)
+TR_R2 = TR_PP + phigh - plow
+TR_S2 = TR_PP - (phigh - plow)
+TR_R3 = phigh + 2 * (TR_PP - plow)
+TR_S3 = plow - 2 * (phigh - TR_PP)
+
+//Signal
+C1_red  = source < TR_S1 and not ta.cross(source, TR_S2) or source < TR_S2 and not ta.cross(source, TR_S3) or source < TR_S3 and not ta.cross(secHigh, TR_S3) ? 1 : 0
+C1_blue = source > TR_R1 and not ta.cross(source, TR_R2) or source > TR_R2 and not ta.cross(source, TR_R3) or source > TR_R3 and not ta.cross(secLow, TR_R3) ? 1 : 0
+
+// Fibonacci
+FIB_PP = (phigh + plow + psource) / 3
+FIB_R1 = FIB_PP + (phigh - plow) * 0.382
+FIB_S1 = FIB_PP - (phigh - plow) * 0.382
+FIB_R2 = FIB_PP + (phigh - plow) * 0.618
+FIB_S2 = FIB_PP - (phigh - plow) * 0.618
+FIB_R3 = FIB_PP + (phigh - plow) * 1.000
+FIB_S3 = FIB_PP - (phigh - plow) * 1.000
+
+C2_red  = source < FIB_S1 and not ta.cross(source, FIB_S2) or source < FIB_S2 and not ta.cross(source, FIB_S3) or source < FIB_S3 and not ta.cross(secHigh, FIB_S3) ? 1 : 0
+C2_blue = source > FIB_R1 and not ta.cross(source, FIB_R2) or source > FIB_R2 and not ta.cross(source, FIB_R3) or source > FIB_R3 and not ta.cross(secLow, FIB_R3) ? 1 : 0
+
+// Woodie
+WO_PP = (phigh + plow + 2 * popen) / 4
+WO_R1 = WO_PP + WO_PP - plow
+WO_S1 = WO_PP - (phigh - WO_PP)
+WO_R2 = WO_PP + phigh - plow
+WO_S2 = WO_PP - (phigh - plow)
+WO_R3 = phigh + 2 * (WO_PP - plow)
+WO_S3 = plow - 2 * (phigh - WO_PP)
+
+C3_red  = source < WO_S1 and not ta.cross(source, WO_S2) or source < WO_S2 and not ta.cross(source, WO_S3) or source < WO_S3 and not ta.cross(secHigh, WO_S3) ? 1 : 0
+C3_blue = source > WO_R1 and not ta.cross(source, WO_R2) or source > WO_R2 and not ta.cross(source, WO_R3) or source > WO_R3 and not ta.cross(secLow, WO_R3) ? 1 : 0
+
+// Camarilla
+CA_PP = (phigh + plow + psource) / 3
+CA_R1 = psource + (phigh - plow) * 1.1 / 12
+CA_S1 = psource - (phigh - plow) * 1.1 / 12
+CA_R2 = psource + (phigh - plow) * 1.1 / 6
+CA_S2 = psource - (phigh - plow) * 1.1 / 6
+CA_R3 = psource + (phigh - plow) * 1.1 / 4
+CA_S3 = psource - (phigh - plow) * 1.1 / 4
+
+C4_red  = source < CA_S1 and not ta.cross(source, CA_S2) or source < CA_S2 and not ta.cross(source, CA_S3) or source < CA_S3 and not ta.cross(secHigh, CA_S3) ? 1 : 0
+C4_blue = source > CA_R1 and not ta.cross(source, CA_R2) or source > CA_R2 and not ta.cross(source, CA_R3) or source > CA_R3 and not ta.cross(secLow, CA_R3) ? 1 : 0
+
+//C Point
+C_red  = C1_red + C2_red + C3_red + C4_red
+C_blue = C1_blue + C2_blue + C3_blue + C4_blue
+
+//Sum point
+Sum_red  = A_red + B_red + C_red
+Sum_blue = A_blue + B_blue + C_blue
+
+sell_point = Sum_red / 32 * 10
+buy_point  = Sum_blue / 32 * 10
+
+////////////////////////////////////////////////////////////////////////////////
+//                                Market Level & TA Table                      //
+////////////////////////////////////////////////////////////////////////////////
+
+sell        = Sum_red > Sum_blue and sell_point > 5 ? 22 : na
+Strong_sell = A_red > A_blue and B_red > B_blue and C_red > C_blue and sell_point > 5 and not ta.crossunder(sell_point, 7.5) ? 22 : na
+buy         = Sum_red < Sum_blue and buy_point > 5 ? 22 : na
+Strong_buy  = A_red < A_blue and B_red < B_blue and C_red < C_blue and buy_point > 5 and not ta.crossunder(buy_point, 7.5) ? 22 : na
+neutral     = bool(sell) and bool(Strong_sell) and bool(buy) and bool(Strong_buy) ? 22 : na
+
+// Set the position of the table
+posInput = input.string(title = 'Position', defval = 'Bottom Right', options = ['Bottom Left', 'Bottom Right', 'Top Left', 'Top Right'], tooltip = 'Select where you want the table to draw.', group = ta_helper)
+var pos  = posInput == 'Bottom Left' ? position.bottom_left : posInput == 'Bottom Right' ? position.bottom_right : posInput == 'Top Left' ? position.top_left : posInput == 'Top Right' ? position.top_right : na
+
+// Adjusts the text size and results in different overall size of the table
+txtSizeInput = input.string(title = 'Text Size', defval = 'Auto', options = ['Tiny', 'Small', 'Normal', 'Large', 'Huge', 'Auto'], tooltip = 'Select the size of the text. It affects the size of the whole table.', group = ta_helper)
+var txtSize  = txtSizeInput == 'Tiny' ? size.tiny : txtSizeInput == 'Small' ? size.small : txtSizeInput == 'Normal' ? size.normal : txtSizeInput == 'Large' ? size.large : txtSizeInput == 'Huge' ? size.huge : txtSizeInput == 'Auto' ? size.auto : na
+
+// Background color for Pivots, Oscillators, MAs, and Summary
+pivBgColor = input.color(title = 'Pivots Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Pivots columns.', group = ta_helper)
+oscBgColor = input.color(title = 'Oscillators Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Oscillators columns.', group = ta_helper)
+maBgColor  = input.color(title = 'Moving Averages Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Moving Averages columns.', group = ta_helper)
+sumBgColor = input.color(title = 'Summary Background Color', defval = #282828bf, tooltip = 'Background color for the Summary columns.', group = ta_helper)
+
+// Background color for the final suggestion
+ssBgColor = input.color(title = 'Strong Sell Background Color', defval = #5d1616, tooltip = 'Background color for the Strong Sell signal.', group = ta_helper)
+sBgColor  = input.color(title = 'Sell Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Sell signal.', group = ta_helper)
+nBgColor  = input.color(title = 'Neutral Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Neutral signal.', group = ta_helper)
+bBgColor  = input.color(title = 'Buy Background Color', defval = #0a0a0abf, tooltip = 'Background color for the Buy signal.', group = ta_helper)
+sbBgColor = input.color(title = 'Strong Buy Background Color', defval = #194616, tooltip = 'Background color for the Strong Buy signal.', group = ta_helper)
+
+// Background color for the pseudohistogram
+negBgColor = input.color(title = 'Sell % Background Color', defval = #5d1616, tooltip = 'Background color for the Sell %.', group = ta_helper)
+netBgColor = input.color(title = 'Neutral % Background Color', defval = #164646, tooltip = 'Background color for the Neutral %.', group = ta_helper)
+posBgColor = input.color(title = 'Buy % Background Color', defval = #194616, tooltip = 'Background color for the Buy %.', group = ta_helper)
+
+// Print Symbol name
+symbol_name = str.tostring(tick)
+get_sym_name = array.get(str.split(symbol_name, ':'), 1)
+
+// Initiate the table
+var table TA_Display = table.new(pos, 5, 6, frame_width = 2, frame_color = #00FFAA)
+
+// Final suggestion / Summary
+if barstate.islast
+    table.cell(TA_Display, 1, 1, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 2, 1, 'Summary' + '-' + get_sym_name, text_color = color.white, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 3, 1, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 1, 2, str.tostring(Sum_red), text_color = #ff1100, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 2, 2, str.tostring(32 - (Sum_red + Sum_blue)), text_color = #52ffe8, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 3, 2, str.tostring(Sum_blue), text_color = #00ffbb, text_size = txtSize, bgcolor = sumBgColor, text_font_family = font.family_monospace)
+
+// Pseudohistogram
+if barstate.isrealtime
+    table.cell(TA_Display, 1, 3, text_color = #ff4500, text_size = txtSize, bgcolor = negBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 1, 4, str.tostring(sell_point * 10) + '%', text_color = #ff4500, text_size = txtSize, bgcolor = negBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 1, 5, text_color = #ff4500, text_size = txtSize, bgcolor = negBgColor, text_font_family = font.family_monospace)
+
+    table.cell(TA_Display, 2, 3, text_color = #52ffe8, text_size = txtSize, bgcolor = netBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 2, 4, str.tostring((10 - sell_point - buy_point) * 10) + '%', text_color = #52ffe8, text_size = txtSize, bgcolor = netBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 2, 5, text_color = #52ffe8, text_size = txtSize, bgcolor = netBgColor, text_font_family = font.family_monospace)
+
+    table.cell(TA_Display, 3, 3, text_color = #00ff00, text_size = txtSize, bgcolor = posBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 3, 4, str.tostring(buy_point * 10) + '%', text_color = #00ff00, text_size = txtSize, bgcolor = posBgColor, text_font_family = font.family_monospace)
+    table.cell(TA_Display, 3, 5, text_color = #00ff00, text_size = txtSize, bgcolor = posBgColor, text_font_family = font.family_monospace)
+
+    if bool(neutral)
+        for i = 1 to 5 by 1
+            table.cell(TA_Display, 4, i, text_color = #52ffe8, text_size = txtSize, bgcolor = nBgColor, text_font_family = font.family_monospace)
+        table.cell_set_text(TA_Display, 4, 3, 'NEUTRAL')
+
+    if sell_point > buy_point
+        if bool(sell) and bool(Strong_sell)
+            for i = 1 to 5 by 1
+                table.cell(TA_Display, 4, i, text_color = #ff4500, text_size = txtSize, bgcolor = sBgColor, text_font_family = font.family_monospace)
+            table.cell_set_text(TA_Display, 4, 3, 'SELL') //Sell
+
+        if bool(Strong_sell)
+            for i = 1 to 5 by 1
+                table.cell(TA_Display, 4, i, text_color = #ff4500, text_size = txtSize, bgcolor = ssBgColor, text_font_family = font.family_monospace)
+            table.cell_set_text(TA_Display, 4, 3, 'SELL+') //Strong Sell            
+
+    else
+        if bool(buy) and bool(Strong_buy)
+            for i = 1 to 5 by 1
+                table.cell(TA_Display, 4, i, text_color = #00ffbb, text_size = txtSize, bgcolor = bBgColor, text_font_family = font.family_monospace)
+            table.cell_set_text(TA_Display, 4, 3, 'BUY') //Buy
+
+        if bool(Strong_buy)
+            for i = 1 to 5 by 1
+                table.cell(TA_Display, 4, i, text_color = #00ff00, text_size = txtSize, bgcolor = sbBgColor, text_font_family = font.family_monospace)
+            table.cell_set_text(TA_Display, 4, 3, 'BUY+') //Strong Buy
+
+// EOF TA table
+
+// Pivot Points (built-in multi‑TF pivots)
+pivotTypeInput          = input.string(title="Type", defval="Traditional", options=["Traditional", "Fibonacci", "Woodie", "Classic", "DM", "Camarilla"])
+pivotAnchorInput        = input.string(title="Pivots Timeframe", defval="Auto", options=["Auto", "Daily", "Weekly", "Monthly", "Quarterly", "Yearly", "Biyearly", "Triyearly", "Quinquennially", "Decennially"])
+maxHistoricalPivotsInput = input.int(title="Number of Pivots Back", defval=15, minval=1, maxval=200, display = display.data_window)
+isDailyBasedInput       = input.bool(title="Use Daily-based Values", defval=true, display = display.data_window, tooltip="When this option is unchecked, Pivot Points will use intraday data while calculating on intraday charts. If Extended Hours are displayed on the chart, they will be taken into account during the pivot level calculation. If intraday OHLC values are different from daily-based values (normal for stocks), the pivot levels will also differ.")
+showLabelsInput         = input.bool(title="Show Labels", defval=true, group="labels", display = display.data_window)
+showPricesInput         = input.bool(title="Show Prices", defval=true, group="labels", display = display.data_window)
+positionLabelsInput     = input.string("Left", "Labels Position", options=["Left", "Right"], group="labels", display = display.data_window)
+linewidthInput          = input.int(title="Line Width", defval=3, minval=1, maxval=100, group="levels", display = display.data_window)
+
+DEFAULT_COLOR   = #FB8C00
+DEFAULT_COLOR_R = #0077ff
+DEFAULT_COLOR_S = #FF1100
+
+pColorInput  = input.color(DEFAULT_COLOR, "P‏  ‏  ‏", inline="P", group="levels", display = display.data_window)
+pShowInput   = input.bool(true, "", inline="P", group="levels", display = display.data_window)
+s1ColorInput = input.color(DEFAULT_COLOR_S, "S1", inline="S1/R1" , group="levels", display = display.data_window)
+s1ShowInput  = input.bool(true, "", inline="S1/R1", group="levels", display = display.data_window)
+r1ColorInput = input.color(DEFAULT_COLOR_R, "‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏R1", inline="S1/R1", group="levels", display = display.data_window)
+r1ShowInput  = input.bool(true, "", inline="S1/R1", group="levels", display = display.data_window)
+
+s2ColorInput = input.color(DEFAULT_COLOR_S, "S2", inline="S2/R2", group="levels", display = display.data_window)
+s2ShowInput  = input.bool(true, "", inline="S2/R2", group="levels", display = display.data_window)
+r2ColorInput = input.color(DEFAULT_COLOR_R, "‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏R2", inline="S2/R2", group="levels", display = display.data_window)
+r2ShowInput  = input.bool(true, "", inline="S2/R2", group="levels", tooltip = "Not applicable to DM", display = display.data_window)
+
+s3ColorInput = input.color(DEFAULT_COLOR_S, "S3", inline="S3/R3", group="levels", display = display.data_window)
+s3ShowInput  = input.bool(true, "", inline="S3/R3", group="levels", display = display.data_window)
+r3ColorInput = input.color(DEFAULT_COLOR_R, "‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏R3", inline="S3/R3", group="levels", display = display.data_window)
+r3ShowInput  = input.bool(true, "", inline="S3/R3", group="levels", tooltip = "Not applicable to DM", display = display.data_window)
+
+s4ColorInput = input.color(DEFAULT_COLOR_S, "S4", inline="S4/R4", group="levels", display = display.data_window)
+s4ShowInput  = input.bool(true, "", inline="S4/R4", group="levels", display = display.data_window)
+r4ColorInput = input.color(DEFAULT_COLOR_R, "‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏R4", inline="S4/R4", group="levels", display = display.data_window)
+r4ShowInput  = input.bool(true, "", inline="S4/R4", group="levels", tooltip = "Not applicable to: Fibonacci, DM", display = display.data_window)
+
+s5ColorInput = input.color(DEFAULT_COLOR_S, "S5", inline="S5/R5", group="levels", display = display.data_window)
+s5ShowInput  = input.bool(true, "", inline="S5/R5", group="levels", display = display.data_window)
+r5ColorInput = input.color(DEFAULT_COLOR_R, "‏  ‏  ‏  ‏  ‏  ‏  ‏  ‏R5", inline="S5/R5", group="levels", display = display.data_window)
+r5ShowInput  = input.bool(true, "", inline="S5/R5", group="levels", tooltip = "Not applicable to: Fibonacci, Woodie, Classic, DM", display = display.data_window)
+
+type graphicSettings
+    string levelName
+    color  levelColor
+    bool   showLevel
+
+var graphicSettingsArray = array.from(
+      graphicSettings.new(" P", pColorInput, pShowInput),
+      graphicSettings.new("R1", r1ColorInput, r1ShowInput), graphicSettings.new("S1", s1ColorInput, s1ShowInput),
+      graphicSettings.new("R2", r2ColorInput, r2ShowInput), graphicSettings.new("S2", s2ColorInput, s2ShowInput),
+      graphicSettings.new("R3", r3ColorInput, r3ShowInput), graphicSettings.new("S3", s3ColorInput, s3ShowInput),
+      graphicSettings.new("R4", r4ColorInput, r4ShowInput), graphicSettings.new("S4", s4ColorInput, s4ShowInput),
+      graphicSettings.new("R5", r5ColorInput, r5ShowInput), graphicSettings.new("S5", s5ColorInput, s5ShowInput))
+
+autoAnchor = switch
+    timeframe.isintraday => timeframe.multiplier <= 15 ? "1D" : "1W"
+    timeframe.isdaily    => "1M"
+    => "12M"
+
+pivotTimeframe = switch pivotAnchorInput
+    "Auto"      => autoAnchor
+    "Daily"     => "1D"
+    "Weekly"    => "1W"
+    "Monthly"   => "1M"
+    "Quarterly" => "3M"
+    => "12M"
+
+//@variable The number of years in the selected Pivot period
+pivotYearMultiplier = switch pivotAnchorInput
+    "Biyearly"       => 2
+    "Triyearly"      => 3
+    "Quinquennially" => 5
+    "Decennially"    => 10
+    => 1
+
+//@variable The number of values in the pivots of the selected type
+numOfPivotLevels = switch pivotTypeInput
+    "Traditional" => 11
+    "Camarilla"   => 11
+    "Woodie"      => 9
+    "Classic"     => 9
+    "Fibonacci"   => 7
+    "DM"          => 3
+
+type pivotGraphic
+    line  pivotLine
+    label pivotLabel
+
+method delete(pivotGraphic graphic) =>
+    graphic.pivotLine.delete()
+    graphic.pivotLabel.delete()
+
+var drawnGraphics = matrix.new<pivotGraphic>()
+
+localPivotTimeframeChange   = timeframe.change(pivotTimeframe) and year % pivotYearMultiplier == 0
+securityPivotTimeframeChange = timeframe.change(timeframe.period) and year % pivotYearMultiplier == 0
+
+pivotTimeframeChangeCounter(condition) => 
+    var count = 0
+    if condition and bar_index > 0
+        count += 1
+    count
+
+localPivots             = ta.pivot_point_levels(pivotTypeInput, localPivotTimeframeChange)
+securityPivotPointsArray = ta.pivot_point_levels(pivotTypeInput, securityPivotTimeframeChange)
+securityTimeframe       = timeframe.isintraday ? "1D" : timeframe.period
+
+[securityPivots, securityPivotCounter] = request.security(syminfo.tickerid, pivotTimeframe, [securityPivotPointsArray, pivotTimeframeChangeCounter(securityPivotTimeframeChange)], lookahead = barmerge.lookahead_on)
+
+pivotPointsArray = isDailyBasedInput ? securityPivots : localPivots
+
+//@function Sets the ending points of the currently active pivots to `endTime`.
+affixOldPivots(endTime) =>
+    if drawnGraphics.rows() > 0
+        lastGraphics = drawnGraphics.row(drawnGraphics.rows() - 1)
+        for graphic in lastGraphics
+            graphic.pivotLine.set_x2(endTime)
+            if positionLabelsInput == "Right"
+                graphic.pivotLabel.set_x(endTime)
+
+//@function Draws pivot lines and labels from `startTime` to the approximate end of the period.
+drawNewPivots(startTime) =>
+    newGraphics = array.new<pivotGraphic>()
+    for [index, coord] in pivotPointsArray
+        levelSettings = graphicSettingsArray.get(index)
+        if not na(coord) and levelSettings.showLevel
+            lineEndTime = startTime + timeframe.in_seconds(pivotTimeframe) * 1000 * pivotYearMultiplier
+
+            // Pivot line
+            pivotLine = line.new(startTime, coord, lineEndTime, coord,
+                                 xloc = xloc.bar_time,
+                                 color = levelSettings.levelColor,
+                                 width = linewidthInput)
+
+            // Compute label parameters separately (no nested ternaries in the call)
+            xPos     = positionLabelsInput == "Left" ? startTime : lineEndTime
+            lblText  = (showLabelsInput ? levelSettings.levelName + " " : "") +
+                       (showPricesInput ? "(" + str.tostring(coord, format.mintick) + ")" : "")
+            lblStyle = positionLabelsInput == "Left" ? label.style_label_right : label.style_label_left
+
+            pivotLabel = label.new(x = xPos,
+                                   y = coord,
+                                   text = lblText,
+                                   style = lblStyle,
+                                   textcolor = levelSettings.levelColor,
+                                   color = #00000000,
+                                   xloc = xloc.bar_time)
+
+            newGraphics.push(pivotGraphic.new(pivotLine, pivotLabel))
+
+    drawnGraphics.add_row(array_id = newGraphics)
+    if drawnGraphics.rows() > maxHistoricalPivotsInput
+        oldGraphics = drawnGraphics.remove_row(0)
+        for graphic in oldGraphics
+            graphic.delete()
+
+localPivotDrawConditionStatic    = not isDailyBasedInput and localPivotTimeframeChange
+securityPivotDrawConditionStatic = isDailyBasedInput and securityPivotCounter != securityPivotCounter[1]
+
+var isMultiYearly = array.from("Biyearly", "Triyearly", "Quinquennially", "Decennially").includes(pivotAnchorInput)
+
+localPivotDrawConditionDeveloping    = not isDailyBasedInput and time_close == time_close(pivotTimeframe) and not isMultiYearly 
+securityPivotDrawConditionDeveloping = false
+
+if (securityPivotDrawConditionStatic or localPivotDrawConditionStatic)
+    affixOldPivots(time)
+    drawNewPivots(time)
+
+// If possible, draw pivots from the beginning of the chart if none were found
+var FIRST_BAR_TIME = time
+
+if (barstate.islastconfirmedhistory and drawnGraphics.columns() == 0)
+    if not na(securityPivots) and securityPivotCounter > 0
+        if isDailyBasedInput
+            drawNewPivots(FIRST_BAR_TIME)
+        else 
+            runtime.error("Not enough intraday data to calculate Pivot Points. Lower the Pivots Timeframe or turn on the 'Use Daily-based Values' option in the indicator settings.")
+    else
+        runtime.error("Not enough data to calculate Pivot Points. Lower the Pivots Timeframe in the indicator settings.")
+

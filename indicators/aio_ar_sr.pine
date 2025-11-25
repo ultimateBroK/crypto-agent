@@ -1,0 +1,278 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ultimateBroK
+
+//@version=6
+indicator('AR + SR', 'AIO_ARSR', overlay = true, max_lines_count = 500, max_labels_count = 500, max_bars_back = 1000)
+
+// AR Forecast Scatterplot 
+import Steversteves/SPTS_StatsPakLib/1 as spts
+
+flush(sourceArr) =>
+    if sourceArr.size() > 0
+        for i = sourceArr.size() - 1 to 0 by 1
+            sourceArr.get(i).delete()
+            sourceArr.remove(i)
+
+t1 = "This will plot a line from the first Result to the last Result for the forecast length"
+t2 = "Showing results and variances will plot both the results (blue) and the standard errors based on the variance in the dataset. Only plotting reuslts will only plot the most likely outcome without the variance."
+t3 = "This will omit the need for you to identify the lookback length yourself and will autofind the best lookback period"
+
+// POSITION AND SIZE
+PosTable  = input.string(defval="Top Right", title="Position", options=["Top Right", "Middle Right", "Bottom Right", "Top Center", "Middle Center", "Bottom Center", "Top Left", "Middle Left", "Bottom Left"], group="Table Location & Size", inline="1")
+SizTable  = input.string(defval="Auto", title="Size", options=["Auto", "Huge", "Large", "Normal", "Small", "Tiny"], group="Table Location & Size", inline="1")
+Pos1Table = PosTable == "Top Right" ? position.top_right : PosTable == "Middle Right" ? position.middle_right : PosTable == "Bottom Right" ? position.bottom_right : PosTable == "Top Center" ? position.top_center : PosTable == "Middle Center" ? position.middle_center : PosTable == "Bottom Center" ? position.bottom_center : PosTable == "Top Left" ? position.top_left : PosTable == "Middle Left" ? position.middle_left : position.bottom_left
+Siz1Table = SizTable == "Auto" ? size.auto : SizTable == "Huge" ? size.huge : SizTable == "Large" ? size.large : SizTable == "Normal" ? size.normal : SizTable == "Small" ? size.small : size.tiny
+
+// Inputs 
+src        = input.source(close, 'Forecast Source')
+train1     = input.int(150, 'Train Time')
+len1       = input.int(14, 'Forecast Length')
+typ        = input.string('Scatter Plot', 'Scatter Plot Type', ['Line Plot', 'Scatter Plot'])
+show_stats = input.bool(true, 'Show Model Statistics')
+line_bf    = input.bool(true, 'Show Trendline', tooltip = t1)
+show_others = input.string('Show Results and Variances', 'Show Results/Variance', ['Show Results and Variances', 'Show Results Only'], tooltip = t2)
+autolen    = input.bool(true, 'Use Auto lookback based on strongest trend', tooltip = t3)
+onlytrend  = input.bool(true, 'Only Show Trendline')
+
+// Arrays 
+results = array.new_float()
+ucl     = array.new_float()
+lcl     = array.new_float()
+
+// Find Trend
+trend_finder(len_) =>
+    ta.correlation(close, time, len_)
+
+// Candidate lookback lengths
+var trend_lengths = array.from(50, 100, 150, 200, 250, 300, 350, 400, 450, 500, 550, 600, 650, 700)
+
+float strongest_trend = na
+int   find_trend      = 100
+
+if autolen
+    strongest_trend := na
+    find_trend      := 100
+    for curLen in trend_lengths
+        curTrend = trend_finder(curLen)
+        if na(strongest_trend) or curTrend > strongest_trend
+            strongest_trend := curTrend
+            find_trend      := curLen
+else
+    find_trend := train1
+
+int train = find_trend
+
+// Forecast 
+[forecast_result, b, c] = spts.f_forecast(src, src[1], train, len1, results, ucl, lcl)
+
+// Model Statistics 
+cor     = ta.correlation(src, src[len1], train)
+r2_2    = math.pow(cor, 2)
+max_val = array.max(ucl)
+min_val = array.min(lcl)
+
+f_primary_labels(id) =>
+    label.new(bar_index + id, array.get(results, id), text = '', color = color.blue, style = label.style_circle, size = size.tiny)
+
+f_secondary_labels(id) =>
+    label.new(bar_index + id, array.get(ucl, id), text = '', color = color.lime, style = label.style_circle, size = size.tiny)
+
+f_secondary_labels2(id) =>
+    label.new(bar_index + id, array.get(lcl, id), text = '', color = color.red, style = label.style_circle, size = size.tiny)
+
+f_primary_line(id) =>
+    line.new(bar_index + id, y1 = array.get(results, id), x2 = bar_index + 1 + id, y2 = array.get(results, id), color = color.blue, width = 3)
+
+f_secondary_line(id) =>
+    line.new(bar_index + id, y1 = array.get(ucl, id), x2 = bar_index + 1 + id, y2 = array.get(ucl, id), color = color.lime, width = 3)
+
+f_secondary_line2(id) =>
+    line.new(bar_index + id, y1 = array.get(lcl, id), x2 = bar_index + 1 + id, y2 = array.get(lcl, id), color = color.red, width = 3)
+
+var label1_ar = array.new<label>()
+var label2_ar = array.new<label>()
+var label3_ar = array.new<label>()
+var line1_ar  = array.new<line>()
+var line2_ar  = array.new<line>()
+var line3_ar  = array.new<line>()
+
+flush(label1_ar)
+flush(label2_ar)
+flush(label3_ar)
+flush(line1_ar)
+flush(line2_ar)
+flush(line3_ar)
+
+var forecast_line = array.new<line>()
+flush(forecast_line)
+
+if barstate.islast and line_bf
+    if forecast_result.size() > 0
+        for i = 1 to forecast_result.size() - 1 by 1
+            forecast_line.push(line.new(bar_index + i - 1, forecast_result.get(i - 1), bar_index + i, forecast_result.get(i), color = color.purple, width = 3))
+
+locNsze(x) => 
+    y   = str.split(str.lower(x), " ")
+    out = ""
+    for i = 0 to array.size(y) - 1
+        out := out + array.get(y, i)
+        if i != array.size(y) - 1
+            out := out + "_"
+    out
+
+r_val   = math.round(cor, 2)
+r2_val  = math.round(r2_2, 3)
+color_bg = #000000
+
+var table data = table.new(locNsze(PosTable), 3, 3, frame_width=2, frame_color=#00FFAA, border_width = 2, border_color = #00FFBB)
+
+if show_stats 
+    table.clear(data, 0, 0, 2, 2)
+    table.cell(data, 0, 0, text = "Info",   bgcolor = color_bg, text_halign=text.align_left, text_size = Siz1Table, text_color = color.white, text_font_family = font.family_default)
+    table.cell(data, 1, 0, text = "Result", bgcolor = color_bg, text_halign=text.align_left, text_size = Siz1Table, text_color = color.white, text_font_family = font.family_default)
+    table.cell(data, 2, 0, text = "Final",  bgcolor = color_bg, text_halign=text.align_left, text_size = Siz1Table, text_color = color.white, text_font_family = font.family_default)
+
+    table.cell(data, 0, 1, text = "R",   bgcolor = color_bg, text_halign=text.align_left, text_size = Siz1Table, text_color = color.white, text_font_family = font.family_default)
+    table.cell(data, 1, 1, str.tostring(r_val),  bgcolor = color_bg, text_halign=text.align_center, text_size = Siz1Table, text_color = color.white, text_font_family = font.family_default)
+
+    table.cell(data, 0, 2, text = "R^2", bgcolor = color_bg, text_halign=text.align_left, text_size = Siz1Table, text_color = color.white, text_font_family = font.family_default)
+    table.cell(data, 1, 2, str.tostring(r2_val), bgcolor = color_bg, text_halign=text.align_center, text_size = Siz1Table, text_color = color.white, text_font_family = font.family_default)
+
+    // Condition checker for R and R^2
+    signal1 = r_val >= 0.95
+    signal2 = r_val >= 0.9 and r_val < 0.95
+    signal3 = r2_val >= 0.9
+    signal4 = r2_val >= 0.85 and r2_val < 0.9
+
+    signal_col    = signal1 ? #194616 : signal2 ? #0a0a0abf : #5D1616
+    signal_txtcol = signal1 ? #00FF00 : signal2 ? #FFFF00 : #FF4500
+
+    if signal1
+        table.cell(data, 2, 1, "🤑", text_size = Siz1Table, text_color = signal_txtcol, bgcolor = signal_col, text_font_family = font.family_default)
+    else if signal2
+        table.cell(data, 2, 1, "😃", text_size = Siz1Table, text_color = signal_txtcol, bgcolor = signal_col, text_font_family = font.family_default)
+    else
+        table.cell(data, 2, 1, "😐", text_size = Siz1Table, text_color = signal_txtcol, bgcolor = signal_col, text_font_family = font.family_default)
+
+    signal_col_1    = signal3 ? #194616 : signal4 ? #0a0a0abf : #5D1616
+    signal_txtcol_1 = signal3 ? #00FF00 : signal4 ? #FFFF00 : #FF4500
+
+    if signal3
+        table.cell(data, 2, 2, "🤑", text_size = Siz1Table, text_color = signal_txtcol_1, bgcolor = signal_col_1, text_font_family = font.family_default)
+    else if signal4
+        table.cell(data, 2, 2, "😃", text_size = Siz1Table, text_color = signal_txtcol_1, bgcolor = signal_col_1, text_font_family = font.family_default)
+    else
+        table.cell(data, 2, 2, "😐", text_size = Siz1Table, text_color = signal_txtcol_1, bgcolor = signal_col_1, text_font_family = font.family_default)
+
+// Scatter / Line plot
+if barstate.islast and typ == "Scatter Plot" and not onlytrend
+    for idx = 0 to len1
+        label1_ar.push(f_primary_labels(idx))
+        if show_others == "Show Results and Variances"
+            label2_ar.push(f_secondary_labels(idx))
+            label3_ar.push(f_secondary_labels2(idx))
+
+if barstate.islast and typ == "Line Plot" and not onlytrend
+    for idx = 0 to len1 
+        line1_ar.push(f_primary_line(idx))
+        if show_others == "Show Results and Variances"
+            line2_ar.push(f_secondary_line(idx))
+            line3_ar.push(f_secondary_line2(idx))
+
+// Support / Resistance boxes
+sr_group = 'Supports and Resistances'
+trn = 50
+
+o  = input.int(0, 'previous supports and resistances', minval = 0, group = sr_group)
+len = input.int(20, 'previous supports and resistances length', minval = 1, group = sr_group)
+cs = input.color(color.new(#00bb8f, trn), 'Support Color', group = sr_group)
+cr = input.color(color.new(#ff1100, trn), 'Resistance Color', group = sr_group)
+
+r  = high < low[2] - (high[2] - low[2]) and math.abs(close[1] - open[1]) > (high[2] - low[2]) * 2
+r2 = high < math.min(low[3], low[4]) - (math.max(high[3], high[4]) - math.min(low[3], low[4])) and math.abs(close[1] - open[2]) > (math.max(high[3], high[4]) - math.min(low[3], low[4])) * 2
+
+for i = 1 to 4 by 1
+    r2 := r2 and r2[i] == false
+    r  := r  and r2[i - 1] == false
+    r
+
+s  = low > high[2] - (high[2] - low[2]) and math.abs(close[1] - open[1]) > (high[2] - low[2]) * 2
+s2 = low > math.max(high[3], high[4]) + math.max(high[3], high[4]) - math.min(low[3], low[4]) and math.abs(close[1] - open[2]) > (math.max(high[3], high[4]) - math.min(low[3], low[4])) * 2
+
+for i = 1 to 4 by 1
+    s2 := s2 and s2[i] == false
+    s  := s  and s2[i - 1] == false
+    s
+
+ass = ta.crossover(close, ta.valuewhen(r, high[2], o))
+for i = 1 to ta.barssince(r) by 1
+    ass := ass and ass[i] == false
+    ass
+
+k   = ta.barssince(ass) < ta.barssince(r) ? ta.barssince(ass) : -2
+box = box.new(ta.valuewhen(r, bar_index, o) - 2, ta.valuewhen(r, high[2], o), o == 0 ? last_bar_index - k : ta.valuewhen(r, bar_index, o) - 2 + len, ta.valuewhen(r, low[2], o), bgcolor = cr, border_color = color.rgb(71, 89, 139, 100))
+box.delete(box[1])
+
+bass = ta.crossunder(close, ta.valuewhen(r, high[2], o))
+for i = 1 to ta.barssince(r) by 1
+    bass := bass and bass[i] == false
+    bass
+
+bk   = ta.barssince(bass) < ta.barssince(r) ? ta.barssince(bass) : -2
+bbox = box.new(last_bar_index - k, ta.valuewhen(r, high[2], o), last_bar_index - bk, ta.valuewhen(r, low[2], o), bgcolor = cs, border_color = color.rgb(71, 89, 139, 100))
+box.delete(bbox[o < 1 ? 1 : 0])
+
+ass2 = ta.crossover(close, math.max(ta.valuewhen(r2, high[3], o), ta.valuewhen(r2, high[4], o)))
+for i = 1 to ta.barssince(r2) by 1
+    ass2 := ass2 and ass2[i] == false
+    ass2
+
+k2   = ta.barssince(ass2) < ta.barssince(r2) ? ta.barssince(ass2) : -2
+box2 = box.new(ta.valuewhen(r2, bar_index, o) - 4, math.max(ta.valuewhen(r2, high[3], o), ta.valuewhen(r2, high[4], o)), o == 0 ? last_bar_index - k2 : ta.valuewhen(r2, bar_index, o) - 4 + len, math.min(ta.valuewhen(r2, low[3], o), ta.valuewhen(r2, low[4], o)), bgcolor = cr, border_color = color.rgb(71, 89, 139, 100))
+box.delete(box2[1])
+
+bass2 = ta.crossunder(close, math.max(ta.valuewhen(r2, high[3], o), ta.valuewhen(r2, high[4], o)))
+for i = 1 to ta.barssince(r2) by 1
+    bass2 := bass2 and bass2[i] == false
+    bass2
+
+bk2   = ta.barssince(bass2) < ta.barssince(r2) ? ta.barssince(bass2) : -2
+bbox2 = box.new(last_bar_index - k2, math.max(ta.valuewhen(r2, high[3], o), ta.valuewhen(r2, high[4], o)), last_bar_index - bk2, math.min(ta.valuewhen(r2, low[3], o), ta.valuewhen(r2, low[4], o)), bgcolor = cs, border_color = color.rgb(71, 89, 139, 100))
+box.delete(bbox2[o == 0 ? 1 : 0])
+
+akk = ta.crossunder(close, ta.valuewhen(s, low[2], o))
+for i = 1 to ta.barssince(s) by 1
+    akk := akk and akk[i] == false
+    akk
+
+k4   = ta.barssince(akk) < ta.barssince(s) ? ta.barssince(akk) : -2
+box4 = box.new(ta.valuewhen(s, bar_index, o) - 2, ta.valuewhen(s, high[2], o), o == 0 ? last_bar_index - k4 : ta.valuewhen(s, bar_index, o) - 2 + len, ta.valuewhen(s, low[2], o), bgcolor = cs, border_color = color.rgb(71, 89, 139, 100))
+box.delete(box4[1])
+
+akk2 = ta.crossunder(close, math.min(ta.valuewhen(s2, low[3], o), ta.valuewhen(s2, low[4], o)))
+for i = 1 to ta.barssince(s2) by 1
+    akk2 := akk2 and akk2[i] == false
+    akk2
+
+k5   = ta.barssince(akk2) < ta.barssince(s2) ? ta.barssince(akk2) : -2
+box5 = box.new(ta.valuewhen(s2, bar_index, o) - 4, math.max(ta.valuewhen(s2, high[3], o), ta.valuewhen(s2, high[4], o)), o == 0 ? last_bar_index - k5 : ta.valuewhen(s2, bar_index, o) - 4 + len, math.min(ta.valuewhen(s2, low[3], o), ta.valuewhen(s2, low[4], o)), bgcolor = cs, border_color = color.rgb(71, 89, 139, 100))
+box.delete(box5[1])
+
+bakk = ta.crossover(close, ta.valuewhen(s, low[2], o))
+for i = 1 to ta.barssince(s) by 1
+    bakk := bakk and bakk[i] == false
+    bakk
+
+bk4   = ta.barssince(bakk) < ta.barssince(s) ? ta.barssince(bakk) : -2
+bbox4 = box.new(last_bar_index - k4, ta.valuewhen(s, high[2], o), last_bar_index - bk4, ta.valuewhen(s, low[2], o), bgcolor = cr, border_color = color.rgb(71, 89, 139, 100))
+box.delete(bbox4[o == 0 ? 1 : 0])
+
+bakk2 = ta.crossover(close, math.min(ta.valuewhen(s2, low[3], o), ta.valuewhen(s2, low[4], o)))
+for i = 1 to ta.barssince(s2) by 1
+    bakk2 := bakk2 and bakk2[i] == false
+    bakk2
+
+bk5   = ta.barssince(bakk2) < ta.barssince(s2) ? ta.barssince(bakk2) : -2
+bbox5 = box.new(last_bar_index - k5, math.max(ta.valuewhen(s2, high[3], o), ta.valuewhen(s2, high[4], o)), last_bar_index - bk5, math.min(ta.valuewhen(s2, low[3], o), ta.valuewhen(s2, low[4], o)), bgcolor = cr, border_color = color.rgb(71, 89, 139, 100))
+box.delete(bbox5[o == 0 ? 1 : 0])
+

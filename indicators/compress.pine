@@ -1,0 +1,460 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © ultimateBroK
+
+//@version=6
+indicator('Compressed Indicator Package (upgrade)', overlay = false)
+
+// ====================================================================================================================================================================================
+// INPUT GROUPS
+// ====================================================================================================================================================================================
+
+group_oscillator = 'Oscillator'
+group_ichimoku = 'Ichimoku'
+group_money_F = 'Money Flow Indicators'
+group_others = 'Others'
+group_ma = 'Moving Averages'
+
+rsi_group = 'RSI Settings'
+macd_group = 'MACD Settings'
+stoch_group = 'Stochastic Settings'
+stoch_rsi_group = 'Stochastic RSI Settings'
+mom_group = 'Momentum Settings'
+adx_group = 'ADX Settings'
+dmi_group = 'DMI Settings'
+cci_group = 'CCI Settings'
+wo_group = 'Wavetrend Oscillator Settings'
+ichimoku_group = 'Ichimoku Settings'
+mfi_group = 'MFI Settings'
+cmf_group = 'CMF Settings'
+bb_group = 'Bollinger Bands Settings'
+wr_group = 'Williams R Settings'
+atr_group = 'ATR Settings'
+ma_group = 'Moving Average Settings'
+
+// ====================================================================================================================================================================================
+// VISIBILITY TOGGLES
+// ====================================================================================================================================================================================
+
+show_rsi = input.bool(false, title = 'RSI', group = group_oscillator)
+show_macd = input.bool(true, title = 'MACD', group = group_oscillator)
+show_stoch = input.bool(false, title = 'Stochastic', group = group_oscillator)
+show_stoch_rsi = input.bool(false, title = 'Stochastic RSI', group = group_oscillator)
+show_mom = input.bool(false, title = 'Momentum', group = group_oscillator)
+show_adx = input.bool(false, title = 'ADX', group = group_oscillator)
+show_dmi = input.bool(false, title = 'DMI', group = group_oscillator)
+show_cci = input.bool(false, title = 'CCI', group = group_oscillator)
+show_wo = input.bool(false, title = 'Wavetrend Oscillator', group = group_oscillator)
+
+show_ichimoku_1 = input.bool(false, title = 'Tenkan-Sen', group = group_ichimoku)
+show_ichimoku_2 = input.bool(false, title = 'Kijun-Sen', group = group_ichimoku)
+show_ichimoku_3 = input.bool(false, title = 'ChikouSpan', group = group_ichimoku)
+show_ichimoku_4 = input.bool(false, title = 'SenkouSpan A', inline = 'SenkouSpan', group = group_ichimoku)
+show_ichimoku_5 = input.bool(false, title = 'SenkouSpan B', inline = 'SenkouSpan', group = group_ichimoku)
+
+show_mfi = input.bool(false, title = 'MFI', group = group_money_F)
+show_cmf = input.bool(false, title = 'CMF', group = group_money_F)
+
+show_bb = input.bool(false, title = 'Bollinger Bands', group = group_others)
+show_wr = input.bool(false, title = 'Williams Percent Range', group = group_others)
+show_atr = input.bool(false, title = 'ATR', group = group_others)
+
+show_ma1 = input.bool(false, title = 'MA1', inline = 'MA', group = group_ma)
+show_ma2 = input.bool(false, title = 'MA2', inline = 'MA', group = group_ma)
+show_ma3 = input.bool(false, title = 'MA3', inline = 'MA', group = group_ma)
+show_ma4 = input.bool(false, title = 'MA4', inline = 'MA', group = group_ma)
+
+// ====================================================================================================================================================================================
+// UTILITY FUNCTIONS
+// ====================================================================================================================================================================================
+
+// Unified Moving Average function
+calcMA(source, length, maType) =>
+    switch maType
+        'SMA' => ta.sma(source, length)
+        'EMA' => ta.ema(source, length)
+        'SMMA (RMA)' => ta.rma(source, length)
+        'WMA' => ta.wma(source, length)
+        'VWMA' => ta.vwma(source, length)
+        => ta.sma(source, length)  // Default fallback
+
+// Variable Index Dynamic Average (VIDYA)
+calcVIDYA(data, length) =>
+    period = 9
+    upSum = math.sum(data > data[1] ? data - data[1] : 0, period)
+    downSum = math.sum(data < data[1] ? data[1] - data : 0, period)
+    chandeMO = nz((upSum - downSum) / (upSum + downSum))
+    alpha = math.abs(chandeMO) * 2 / (length + 1)
+    vidya = 0.0
+    vidya := length == 1 ? data : na(vidya[1]) ? ta.sma(data, length) : alpha * (data - nz(vidya[1])) + nz(vidya[1])
+    vidya
+
+// Hull Moving Average
+calcHullMA(source, length) =>
+    halfLength = math.floor(length / 2)
+    sqrtLength = math.floor(math.sqrt(length))
+    ta.wma(2 * ta.wma(source, halfLength) - ta.wma(source, length), sqrtLength)
+
+// Extended MA function for Moving Averages section
+calcExtendedMA(source, length, maType) =>
+    switch maType
+        'WMA' => ta.wma(source, length)
+        'EMA' => ta.ema(source, length)
+        'SMA' => ta.sma(source, length)
+        'VWMA' => ta.vwma(source, length)
+        'HULL MA' => calcHullMA(source, length)
+        'VAR' => calcVIDYA(source, length)
+        => ta.ema(source, length)  // Default fallback
+
+// ====================================================================================================================================================================================
+// RSI INDICATOR
+// ====================================================================================================================================================================================
+
+rsiLengthInput = input.int(14, minval = 1, title = 'RSI Length', group = rsi_group)
+rsiSourceInput = input.source(close, 'Source', group = rsi_group)
+maTypeInput = input.string('SMA', title = 'MA Type', options = ['SMA', 'Bollinger Bands', 'EMA', 'SMMA (RMA)', 'WMA', 'VWMA'], group = rsi_group)
+maLengthInput = input.int(14, title = 'MA Length', group = rsi_group)
+bbMultInput = input.float(2.0, minval = 0.001, maxval = 50, title = 'BB StdDev', group = rsi_group)
+
+rsiUp = ta.rma(math.max(ta.change(rsiSourceInput), 0), rsiLengthInput)
+rsiDown = ta.rma(-math.min(ta.change(rsiSourceInput), 0), rsiLengthInput)
+rsi = rsiDown == 0 ? 100 : rsiUp == 0 ? 0 : 100 - 100 / (1 + rsiUp / rsiDown)
+rsiMA = calcMA(rsi, maLengthInput, maTypeInput)
+isBB = maTypeInput == 'Bollinger Bands'
+
+rsiUpColor = input.color(#00ffbb, 'Up Color', group = rsi_group)
+rsiDownColor = input.color(#ff1100, 'Down Color', group = rsi_group)
+
+rsiPlot = plot(show_rsi ? rsi : na, 'RSI', color = #0022ff)
+plot(show_rsi ? rsiMA : na, 'RSI-based MA', color = #00ff11)
+
+rsiUpperBand = hline(show_rsi ? 75 : na, 'RSI Upper Band', color = rsiDownColor, linestyle = hline.style_solid, linewidth = 2)
+rsiMidline = hline(show_rsi ? 50 : na, 'RSI Middle Band', color = color.new(#787B86, 50))
+rsiLowerBand = hline(show_rsi ? 25 : na, 'RSI Lower Band', color = rsiUpColor, linestyle = hline.style_solid, linewidth = 2)
+
+fill(rsiUpperBand, rsiLowerBand, color = color.rgb(126, 87, 194, 90), title = 'RSI Background Fill', display = display.none)
+bbUpperBand = plot(show_rsi and isBB ? rsiMA + ta.stdev(rsi, maLengthInput) * bbMultInput : na, title = 'Upper Bollinger Band', color = color.green)
+bbLowerBand = plot(show_rsi and isBB ? rsiMA - ta.stdev(rsi, maLengthInput) * bbMultInput : na, title = 'Lower Bollinger Band', color = color.green)
+fill(bbUpperBand, bbLowerBand, color = isBB ? color.new(color.green, 90) : na, title = 'Bollinger Bands Background Fill')
+
+rsiMidLinePlot = plot(show_rsi ? 50 : na, color = na, editable = false, display = display.none)
+fill(rsiPlot, rsiMidLinePlot, 100, 50, top_color = color.new(#00ffbb, 0), bottom_color = color.new(#00ffbb, 100), title = 'Overbought Gradient Fill')
+fill(rsiPlot, rsiMidLinePlot, 50, 0, top_color = color.new(#ff1100, 100), bottom_color = color.new(#ff1100, 0), title = 'Oversold Gradient Fill')
+
+// ====================================================================================================================================================================================
+// MACD INDICATOR
+// ====================================================================================================================================================================================
+
+fast_length = input.int(12, title = 'Fast Length', minval = 1, group = macd_group)
+slow_length = input.int(26, title = 'Slow Length', minval = 1, group = macd_group)
+macdSource = input.source(close, title = 'Source', group = macd_group)
+signal_length = input.int(9, title = 'Signal Smoothing', minval = 1, maxval = 50, group = macd_group)
+sma_source = input.string('EMA', title = 'Oscillator MA Type', options = ['SMA', 'EMA'], group = macd_group)
+sma_signal = input.string('EMA', title = 'Signal Line MA Type', options = ['SMA', 'EMA'], group = macd_group)
+
+col_macd = input.color(#2962FF, 'MACD Line', group = macd_group, inline = 'MACD')
+col_signal = input.color(#FF6D00, 'Signal Line', group = macd_group, inline = 'Signal')
+col_grow_above = input.color(#26A69A, 'Above Grow', group = macd_group, inline = 'Above')
+col_fall_above = input.color(#B2DFDB, 'Fall', group = macd_group, inline = 'Above')
+col_grow_below = input.color(#FFCDD2, 'Below Grow', group = macd_group, inline = 'Below')
+col_fall_below = input.color(#FF5252, 'Fall', group = macd_group, inline = 'Below')
+
+fast_ma = sma_source == 'SMA' ? ta.sma(macdSource, fast_length) : ta.ema(macdSource, fast_length)
+slow_ma = sma_source == 'SMA' ? ta.sma(macdSource, slow_length) : ta.ema(macdSource, slow_length)
+macd = fast_ma - slow_ma
+macdSignal = sma_signal == 'SMA' ? ta.sma(macd, signal_length) : ta.ema(macd, signal_length)
+hist = macd - macdSignal
+
+hline(show_macd ? 0 : na, 'Zero Line', color = color.new(#787B86, 50))
+histColor = hist >= 0 ? (hist[1] < hist ? col_grow_above : col_fall_above) : (hist[1] < hist ? col_grow_below : col_fall_below)
+plot(show_macd ? hist : na, title = 'Histogram', style = plot.style_columns, color = histColor)
+plot(show_macd ? macd : na, title = 'MACD', color = col_macd)
+plot(show_macd ? macdSignal : na, title = 'Signal', color = col_signal)
+
+macdBuyCond = ta.crossover(macd, macdSignal)
+macdSellCond = ta.crossover(macdSignal, macd)
+showMacdSignals = input.bool(true, title = 'Signals', group = macd_group)
+
+plotshape(show_macd and showMacdSignals and macdBuyCond ? macd : na, title = 'MACD Buy Point', location = location.absolute, style = shape.circle, size = size.tiny, color = color.rgb(0, 255, 8))
+plotshape(show_macd and showMacdSignals and macdSellCond ? macd : na, title = 'MACD Sell Point', location = location.absolute, style = shape.circle, size = size.tiny, color = #ff0000)
+
+// ====================================================================================================================================================================================
+// ICHIMOKU INDICATOR
+// ====================================================================================================================================================================================
+
+conversionPeriods = input.int(9, minval = 1, title = 'Conversion Line Length', group = ichimoku_group)
+basePeriods = input.int(26, minval = 1, title = 'Base Line Length', group = ichimoku_group)
+laggingSpan2Periods = input.int(52, minval = 1, title = 'Leading Span B Length', group = ichimoku_group)
+displacement = input.int(26, minval = 1, title = 'Lagging Span', group = ichimoku_group)
+
+donchian(len) =>
+    math.avg(ta.lowest(len), ta.highest(len))
+
+conversionLine = donchian(conversionPeriods)
+baseLine = donchian(basePeriods)
+leadLine1 = math.avg(conversionLine, baseLine)
+leadLine2 = donchian(laggingSpan2Periods)
+
+plot(show_ichimoku_1 ? conversionLine : na, color = #2962FF, title = 'Conversion Line')
+plot(show_ichimoku_2 ? baseLine : na, color = #B71C1C, title = 'Base Line')
+plot(show_ichimoku_3 ? close : na, offset = -displacement + 1, color = #43A047, title = 'Lagging Span')
+leading_span_a = plot(show_ichimoku_4 ? leadLine1 : na, offset = displacement - 1, color = #A5D6A7, title = 'Leading Span A')
+leading_span_b = plot(show_ichimoku_5 ? leadLine2 : na, offset = displacement - 1, color = #EF9A9A, title = 'Leading Span B')
+plot(leadLine1 > leadLine2 ? leadLine1 : leadLine2, offset = displacement - 1, title = 'Kumo Cloud Upper Line', display = display.none)
+plot(leadLine1 < leadLine2 ? leadLine1 : leadLine2, offset = displacement - 1, title = 'Kumo Cloud Lower Line', display = display.none)
+fill(leading_span_a, leading_span_b, color = leadLine1 > leadLine2 ? color.rgb(67, 160, 71, 90) : color.rgb(244, 67, 54, 90))
+
+// ====================================================================================================================================================================================
+// STOCHASTIC INDICATOR
+// ====================================================================================================================================================================================
+
+periodK = input.int(14, title = '%K Length', minval = 1, group = stoch_group)
+smoothK = input.int(1, title = '%K Smoothing', minval = 1, group = stoch_group)
+periodD = input.int(3, title = '%D Smoothing', minval = 1, group = stoch_group)
+k_stoch = ta.sma(ta.stoch(close, high, low, periodK), smoothK)
+d_stoch = ta.sma(k_stoch, periodD)
+
+plot(show_stoch ? k_stoch : na, title = '%K', color = #2962FF)
+plot(show_stoch ? d_stoch : na, title = '%D', color = #FF6D00)
+h0 = hline(show_stoch ? 80 : na, 'Upper Band', color = #787B86)
+hline(show_stoch ? 50 : na, 'Middle Band', color = color.new(#787B86, 50))
+h1 = hline(show_stoch ? 20 : na, 'Lower Band', color = #787B86)
+fill(h0, h1, color = color.rgb(33, 150, 243, 90), title = 'Background')
+
+// ====================================================================================================================================================================================
+// STOCHASTIC RSI INDICATOR
+// ====================================================================================================================================================================================
+
+smoothK_rsi = input.int(3, 'K', minval = 1, group = stoch_rsi_group)
+smoothD_rsi = input.int(3, 'D', minval = 1, group = stoch_rsi_group)
+lengthRSI = input.int(14, 'RSI Length', minval = 1, group = stoch_rsi_group)
+lengthStoch = input.int(14, 'Stochastic Length', minval = 1, group = stoch_rsi_group)
+src_stoch_rsi = input.source(close, title = 'RSI Source', group = stoch_rsi_group)
+rsi1 = ta.rsi(src_stoch_rsi, lengthRSI)
+k_stoch_rsi = ta.sma(ta.stoch(rsi1, rsi1, rsi1, lengthStoch), smoothK_rsi)
+d_stoch_rsi = ta.sma(k_stoch_rsi, smoothD_rsi)
+
+plot(show_stoch_rsi ? k_stoch_rsi : na, 'K', color = #2962FF)
+plot(show_stoch_rsi ? d_stoch_rsi : na, 'D', color = #FF6D00)
+h0_stoch_rsi = hline(show_stoch_rsi ? 80 : na, 'Upper Band', color = #787B86)
+hline(show_stoch_rsi ? 50 : na, 'Middle Band', color = color.new(#787B86, 50))
+h1_stoch_rsi = hline(show_stoch_rsi ? 20 : na, 'Lower Band', color = #787B86)
+fill(h0_stoch_rsi, h1_stoch_rsi, color = color.rgb(33, 150, 243, 90), title = 'Background')
+
+// ====================================================================================================================================================================================
+// ADX INDICATOR
+// ====================================================================================================================================================================================
+
+adxlen = input.int(14, title = 'ADX Smoothing', minval = 1, group = adx_group)
+dilen = input.int(14, title = 'DI Length', minval = 1, group = adx_group)
+
+dirmov(len) =>
+    up = ta.change(high)
+    down = -ta.change(low)
+    plusDM = na(up) ? na : up > down and up > 0 ? up : 0
+    minusDM = na(down) ? na : down > up and down > 0 ? down : 0
+    truerange = ta.rma(ta.tr, len)
+    plus = fixnan(100 * ta.rma(plusDM, len) / truerange)
+    minus = fixnan(100 * ta.rma(minusDM, len) / truerange)
+    [plus, minus]
+
+calcADX(diLen, adxLen) =>
+    [plus, minus] = dirmov(diLen)
+    sum = plus + minus
+    100 * ta.rma(math.abs(plus - minus) / (sum == 0 ? 1 : sum), adxLen)
+
+adxValue = calcADX(dilen, adxlen)
+plot(show_adx ? adxValue : na, color = color.red, title = 'ADX')
+
+// ====================================================================================================================================================================================
+// MOMENTUM INDICATOR
+// ====================================================================================================================================================================================
+
+len_mom = input.int(10, minval = 1, title = 'Length', group = mom_group)
+src_mom = input.source(close, title = 'Source', group = mom_group)
+mom = src_mom - src_mom[len_mom]
+plot(show_mom ? mom : na, color = #2962FF, title = 'MOM')
+
+// ====================================================================================================================================================================================
+// CCI INDICATOR
+// ====================================================================================================================================================================================
+
+length_cci = input.int(20, minval = 1, group = cci_group)
+src_cci = input.source(hlc3, title = 'Source', group = cci_group)
+ma_cci = ta.sma(src_cci, length_cci)
+cci = (src_cci - ma_cci) / (0.015 * ta.dev(src_cci, length_cci))
+
+plot(show_cci ? cci : na, 'CCI', color = #2962FF)
+band1 = hline(show_cci ? 100 : na, 'Upper Band', color = #787B86, linestyle = hline.style_dashed)
+hline(show_cci ? 0 : na, 'Middle Band', color = color.new(#787B86, 50))
+band0 = hline(show_cci ? -100 : na, 'Lower Band', color = #787B86, linestyle = hline.style_dashed)
+fill(band1, band0, color = color.rgb(33, 150, 243, 90), title = 'Background')
+
+typeMA = input.string('SMA', title = 'Method', options = ['SMA', 'EMA', 'SMMA (RMA)', 'WMA', 'VWMA'], group = cci_group)
+smoothingLength = input.int(5, title = 'Smoothing Length', minval = 1, maxval = 100, group = cci_group)
+
+smoothingLine = calcMA(cci, smoothingLength, typeMA)
+plot(show_cci ? smoothingLine : na, title = 'Smoothing Line', color = #f37f20, display = display.none)
+
+// ====================================================================================================================================================================================
+// BOLLINGER BANDS INDICATOR
+// ====================================================================================================================================================================================
+
+length_bb = input.int(20, minval = 1, group = bb_group)
+maType_bb = input.string('SMA', 'Basis MA Type', options = ['SMA', 'EMA', 'SMMA (RMA)', 'WMA', 'VWMA'], group = bb_group)
+src_bb = input.source(close, title = 'Source', group = bb_group)
+mult_bb = input.float(2.0, minval = 0.001, maxval = 50, title = 'StdDev', group = bb_group)
+offset_bb = input.int(0, 'Offset', minval = -500, maxval = 500, group = bb_group)
+
+basis = calcMA(src_bb, length_bb, maType_bb)
+dev = mult_bb * ta.stdev(src_bb, length_bb)
+upper = basis + dev
+lower = basis - dev
+
+p1_bb = plot(show_bb ? upper : na, 'Upper', color = #2962FF, offset = offset_bb)
+p2_bb = plot(show_bb ? lower : na, 'Lower', color = #2962FF, offset = offset_bb)
+plot(show_bb ? basis : na, 'Basis', color = #FF6D00, offset = offset_bb)
+fill(p1_bb, p2_bb, title = 'Background', color = color.rgb(33, 150, 243, 95))
+
+// ====================================================================================================================================================================================
+// WAVETREND OSCILLATOR INDICATOR
+// ====================================================================================================================================================================================
+
+n1 = input.int(10, 'Channel Length', minval = 1, group = wo_group)
+n2 = input.int(21, 'Average Length', minval = 1, group = wo_group)
+obLevel1 = input.int(60, 'Over Bought Level 1', group = wo_group)
+obLevel2 = input.int(53, 'Over Bought Level 2', group = wo_group)
+osLevel1 = input.int(-60, 'Over Sold Level 1', group = wo_group)
+osLevel2 = input.int(-53, 'Over Sold Level 2', group = wo_group)
+
+ap = hlc3
+esa = ta.ema(ap, n1)
+d = ta.ema(math.abs(ap - esa), n1)
+ci = (ap - esa) / (0.015 * d)
+tci = ta.ema(ci, n2)
+wt1 = tci
+wt2 = ta.sma(wt1, 4)
+
+plot(show_wo ? obLevel1 : na, 'Over Bought Level 1', color = color.blue)
+plot(show_wo ? obLevel2 : na, 'Over Bought Level 2', color = color.red)
+plot(show_wo ? osLevel1 : na, 'Over Sold Level 1', color = color.blue)
+plot(show_wo ? osLevel2 : na, 'Over Sold Level 2', color = color.red)
+
+plot(show_wo ? wt1 : na, 'WT1', color = color.green)
+plot(show_wo ? wt2 : na, 'WT2', color = color.orange)
+
+// ====================================================================================================================================================================================
+// ATR INDICATOR
+// ====================================================================================================================================================================================
+
+length_atr = input.int(14, title = 'Length', minval = 1, group = atr_group)
+smoothing_atr = input.string('RMA', title = 'Smoothing', options = ['RMA', 'SMA', 'EMA', 'WMA'], group = atr_group)
+
+calcATR(source, length) =>
+    switch smoothing_atr
+        'RMA' => ta.rma(source, length)
+        'SMA' => ta.sma(source, length)
+        'EMA' => ta.ema(source, length)
+        => ta.wma(source, length)
+
+plot(show_atr ? calcATR(ta.tr(true), length_atr) : na, title = 'ATR', color = color.new(#B71C1C, 0))
+
+// ====================================================================================================================================================================================
+// DMI INDICATOR
+// ====================================================================================================================================================================================
+
+lensig_dmi = input.int(14, title = 'ADX Smoothing', minval = 1, maxval = 50, group = dmi_group)
+len_dmi = input.int(14, minval = 1, title = 'DI Length', group = dmi_group)
+
+up_dmi = ta.change(high)
+down_dmi = -ta.change(low)
+plusDM_dmi = na(up_dmi) ? na : up_dmi > down_dmi and up_dmi > 0 ? up_dmi : 0
+minusDM_dmi = na(down_dmi) ? na : down_dmi > up_dmi and down_dmi > 0 ? down_dmi : 0
+trur = ta.rma(ta.tr, len_dmi)
+plus_dmi = fixnan(100 * ta.rma(plusDM_dmi, len_dmi) / trur)
+minus_dmi = fixnan(100 * ta.rma(minusDM_dmi, len_dmi) / trur)
+sum_dmi = plus_dmi + minus_dmi
+adx_dmi = 100 * ta.rma(math.abs(plus_dmi - minus_dmi) / (sum_dmi == 0 ? 1 : sum_dmi), lensig_dmi)
+
+plot(show_dmi ? adx_dmi : na, color = #F50057, title = 'ADX')
+plot(show_dmi ? plus_dmi : na, color = #2962FF, title = '+DI')
+plot(show_dmi ? minus_dmi : na, color = #FF6D00, title = '-DI')
+
+// ====================================================================================================================================================================================
+// MFI INDICATOR
+// ====================================================================================================================================================================================
+
+length_mfi = input.int(14, title = 'Length', minval = 1, maxval = 2000, group = mfi_group)
+src_mfi = input.source(hlc3, title = 'Source', group = mfi_group)
+mf_mfi = ta.mfi(src_mfi, length_mfi)
+
+overbought_mfi = hline(show_mfi ? 80 : na, title = 'Overbought', color = #787B86)
+oversold_mfi = hline(show_mfi ? 20 : na, title = 'Oversold', color = #787B86)
+
+plot(show_mfi ? mf_mfi : na, 'MF', color = #7E57C2)
+hline(show_mfi ? 50 : na, 'Middle Band', color = color.new(#787B86, 50))
+fill(overbought_mfi, oversold_mfi, color = color.rgb(126, 87, 194, 90), title = 'Background')
+
+// ====================================================================================================================================================================================
+// CMF INDICATOR
+// ====================================================================================================================================================================================
+
+var cumVol = 0.
+cumVol := cumVol + nz(volume)
+if barstate.islast and cumVol == 0
+    runtime.error('No volume is provided by the data vendor.')
+length_cmf = input.int(20, minval = 1, group = cmf_group)
+ad = close == high and close == low or high == low ? 0 : (2 * close - low - high) / (high - low) * volume
+mf = math.sum(ad, length_cmf) / math.sum(volume, length_cmf)
+plot(show_cmf ? mf : na, color = #43A047, title = 'MF')
+hline(show_cmf ? 0 : na, color = #787B86, title = 'Zero', linestyle = hline.style_dashed)
+
+// ====================================================================================================================================================================================
+// WILLIAMS %R INDICATOR
+// ====================================================================================================================================================================================
+
+length_wr = input.int(14, title = 'Length', minval = 1, group = wr_group)
+src_wr = input.source(close, 'Source', group = wr_group)
+
+calcWilliamsR(src, length) =>
+    max_wr = ta.highest(high, length)
+    min_wr = ta.lowest(low, length)
+    100 * (src - max_wr) / (max_wr - min_wr)
+
+percentR_wr = calcWilliamsR(src_wr, length_wr)
+obPlot_wr = hline(show_wr ? -20 : na, title = 'Upper Band', color = #787B86)
+hline(show_wr ? -50 : na, title = 'Middle Level', linestyle = hline.style_dotted, color = #787B86)
+osPlot_wr = hline(show_wr ? -80 : na, title = 'Lower Band', color = #787B86)
+fill(obPlot_wr, osPlot_wr, title = 'Background', color = color.rgb(126, 87, 194, 90))
+plot(show_wr ? percentR_wr : na, title = '%R', color = #7E57C2)
+
+// ====================================================================================================================================================================================
+// MOVING AVERAGES INDICATORS
+// ====================================================================================================================================================================================
+
+source_for_moving_averages = input.source(close, title = 'Source', group = ma_group)
+
+maTypeInput1 = input.string('EMA', title = 'MA 1 Type', options = ['WMA', 'EMA', 'SMA', 'VWMA', 'HULL MA', 'VAR'], group = ma_group)
+ma1_linewidth = input.int(1, title = 'MA 1 Linewidth', minval = 1, group = ma_group)
+maLengthInput1 = input.int(9, title = 'MA 1 Length', minval = 1, group = ma_group)
+
+maTypeInput2 = input.string('EMA', title = 'MA 2 Type', options = ['WMA', 'EMA', 'SMA', 'VWMA', 'HULL MA', 'VAR'], group = ma_group)
+ma2_linewidth = input.int(1, title = 'MA 2 Linewidth', minval = 1, group = ma_group)
+maLengthInput2 = input.int(20, title = 'MA 2 Length', minval = 1, group = ma_group)
+
+maTypeInput3 = input.string('EMA', title = 'MA 3 Type', options = ['WMA', 'EMA', 'SMA', 'VWMA', 'HULL MA', 'VAR'], group = ma_group)
+ma3_linewidth = input.int(1, title = 'MA 3 Linewidth', minval = 1, group = ma_group)
+maLengthInput3 = input.int(50, title = 'MA 3 Length', minval = 1, group = ma_group)
+
+maTypeInput4 = input.string('EMA', title = 'MA 4 Type', options = ['WMA', 'EMA', 'SMA', 'VWMA', 'HULL MA', 'VAR'], group = ma_group)
+ma4_linewidth = input.int(1, title = 'MA 4 Linewidth', minval = 1, group = ma_group)
+maLengthInput4 = input.int(100, title = 'MA 4 Length', minval = 1, group = ma_group)
+
+maline1 = calcExtendedMA(source_for_moving_averages, maLengthInput1, maTypeInput1)
+maline2 = calcExtendedMA(source_for_moving_averages, maLengthInput2, maTypeInput2)
+maline3 = calcExtendedMA(source_for_moving_averages, maLengthInput3, maTypeInput3)
+maline4 = calcExtendedMA(source_for_moving_averages, maLengthInput4, maTypeInput4)
+
+plot(show_ma1 ? maline1 : na, title = 'MA1', color = color.new(color.yellow, 0), linewidth = ma1_linewidth)
+plot(show_ma2 ? maline2 : na, title = 'MA2', color = color.new(color.white, 0), linewidth = ma2_linewidth)
+plot(show_ma3 ? maline3 : na, title = 'MA3', color = color.new(color.blue, 0), linewidth = ma3_linewidth)
+plot(show_ma4 ? maline4 : na, title = 'MA4', color = color.new(color.red, 0), linewidth = ma4_linewidth)

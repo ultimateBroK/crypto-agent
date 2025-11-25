@@ -1,0 +1,32 @@
+# Core web stack
+fastapi
+uvicorn
+httpx
+
+# Frontend / UI
+reflex
+textual[syntax]
+
+# Trading / Charts
+ccxt
+lightweight-charts
+
+# Data & Utils
+pandas
+python-dotenv
+
+# AI / LLM
+agno
+google-genai
+ollama
+
+# Indicators / Quant
+ta-lib  # Requires system-level TA-Lib installed
+
+# Vector / Search
+pinecone
+
+# Database drivers (choose ONE psycopg variant)
+psycopg[binary]  # Modern psycopg (v3) binary wheels
+# psycopg2-binary  # Legacy; remove if using psycopg above
+asyncpg  # For async PostgreSQL access
