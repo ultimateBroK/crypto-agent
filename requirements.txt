@@ -12,7 +12,7 @@ ccxt
 lightweight-charts
 
 # Data & Utils
-pandas
+polars
 python-dotenv
 
 # AI / LLM
