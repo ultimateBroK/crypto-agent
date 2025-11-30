@@ -1,15 +1,19 @@
 from datetime import datetime
 import numpy as np
-from tools.utils.exchange import EXCHANGE
+from typing import Optional
+from tools.utils.exchange import fetch_ohlcv
+from tools.utils.nlp import resolve_timeframe
 
 
-def get_forecast(coin: str, timeframe: str = '1h', train_len: int = 100, forecast_len: int = 10, **kwargs):
+def get_forecast(coin: str, timeframe: Optional[str] = None, train_len: int = 100, forecast_len: int = 10, **kwargs):
     """Linear regression forecast for price movement."""
     pair = f"{coin.upper().strip()}/USDT"
-    try:
-        ohlcv = EXCHANGE.fetch_ohlcv(pair, timeframe=timeframe, limit=train_len + 10)
-    except Exception as e:
-        return f"❌ Error OHLCV {pair}: {e}"
+    # Resolve timeframe from kwargs/prompt, honoring natural-language hints
+    timeframe, tf_reason = resolve_timeframe(timeframe, return_reason=True, **kwargs)
+
+    ohlcv, error = fetch_ohlcv(pair, timeframe=timeframe, limit=train_len + 10)
+    if error:
+        return error
     
     if len(ohlcv) < train_len:
         return f"⚠️ Not enough data for {pair}"
@@ -67,6 +71,8 @@ Confidence Band:
     else:
         out += "\n⚠️ Low confidence forecast (R² < 0.7) - use with caution"
     
+    if tf_reason:
+        out += f"\n⚠️ Note: {tf_reason}"
     return out
 
 

@@ -10,7 +10,6 @@ from tools.utils.helpers import (
 )
 from tools.utils.formatters import build_header, format_price
 from tools.utils.constants import RSI_PERIOD, STOCH_K_PERIOD
-from tools.utils.nlp import resolve_timeframe
 
 
 def _calculate_cci(data, period: int = 20) -> Optional[float]:
@@ -337,7 +336,8 @@ def _determine_overall_signal(buy_pct: float, sell_pct: float,
         return "NEUTRAL"
 
 
-def get_ta_summary(coin: str, timeframe: Optional[str] = None, **kwargs) -> str:
+def get_ta_summary(coin: str, timeframe: str = '1h', **kwargs) -> str:
+def get_ta_summary(coin: str, timeframe: str = '1h', **kwargs) -> str:
     """
     Composite Technical Analysis summary combining oscillators, MAs, and pivots.
     
@@ -349,7 +349,6 @@ def get_ta_summary(coin: str, timeframe: Optional[str] = None, **kwargs) -> str:
         Formatted TA summary string
     """
     pair = f"{coin.upper().strip()}/USDT"
-    timeframe, tf_reason = resolve_timeframe(timeframe, default='1h', return_reason=True, **kwargs)
     
     # Fetch OHLCV data
     ohlcv, error = fetch_ohlcv(pair, timeframe=timeframe, limit=200)
@@ -439,8 +438,6 @@ Key Indicators:
   MACD Hist: {macd_status}
   Momentum(10): {osc_results.get('momentum', 0):+.6f}
 """
-    if tf_reason:
-        output += f"\n⚠️ {tf_reason}"
     return output
     
     opens = [x[1] for x in ohlcv]

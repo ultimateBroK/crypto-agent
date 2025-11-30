@@ -69,3 +69,6 @@ temp/
 # Portfolio & trading history
 portfolio_history/
 trade_logs/
+
+# Testing outputs
+tests/

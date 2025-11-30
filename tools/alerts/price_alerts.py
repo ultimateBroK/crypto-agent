@@ -1,7 +1,14 @@
+"""
+Price alert management with improved storage and shared utilities.
+"""
 import json
 from datetime import datetime
 from pathlib import Path
-import ccxt
+from typing import Dict, Any, Optional
+from tools.utils.exchange import EXCHANGE, fetch_ticker
+from tools.utils.formatters import format_timestamp, format_price
+from tools.utils.constants import VALID_ALERT_CONDITIONS
+
 
 ALERTS_FILE = Path(__file__).parent.parent.parent / "data" / "alerts.json"
 
@@ -23,13 +30,27 @@ def _save_alerts(alerts):
         json.dump(alerts, f, indent=2)
 
 
-def set_price_alert(coin: str, condition: str, price: float, message: str = "", **kwargs):
+def set_price_alert(coin: str, condition: str, price: float, message: str = "", **kwargs) -> str:
+    """
+    Set a price alert for a cryptocurrency.
+    
+    Args:
+        coin: Cryptocurrency symbol
+        condition: Alert condition (above, below, crosses_above, crosses_below)
+        price: Target price
+        message: Optional custom message
+        
+    Returns:
+        Confirmation message
+    """
     coin_upper = coin.upper().strip()
-    valid_conditions = ['above', 'below', 'crosses_above', 'crosses_below']
-    if condition not in valid_conditions:
-        return f"❌ Invalid condition. Use one of: {', '.join(valid_conditions)}"
+    
+    if condition not in VALID_ALERT_CONDITIONS:
+        return f"❌ Invalid condition. Use one of: {', '.join(VALID_ALERT_CONDITIONS)}"
+    
     if price <= 0:
         return "❌ Price must be greater than 0"
+    
     alerts = _load_alerts()
     alert_id = f"{coin_upper}_{condition}_{price}_{datetime.now().timestamp()}"
     alert_data = {
@@ -41,15 +62,17 @@ def set_price_alert(coin: str, condition: str, price: float, message: str = "", 
         'triggered': False,
         'last_check_price': None
     }
+    
     alerts[alert_id] = alert_data
     _save_alerts(alerts)
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    
+    ts = format_timestamp()
     return f"""✅ Price Alert Created
 🕐 {ts}
 
 Alert ID: {alert_id}
 Coin: {coin_upper}/USDT
-Condition: Price {condition} ${price:,.2f}
+Condition: Price {condition} ${format_price(price, 2)}
 Message: {alert_data['message']}
 
 Use check_alerts() to monitor active alerts.
@@ -101,87 +124,116 @@ ID: {alert_id}
 """
 
 
-def check_alerts(coin: str = None, **kwargs):
+def check_alerts(coin: str = None, **kwargs) -> str:
+    """
+    Check all active alerts and trigger if conditions are met.
+    
+    Args:
+        coin: Optional coin filter to check specific coin's alerts
+        
+    Returns:
+        Alert check results with triggered and active alerts
+    """
     alerts = _load_alerts()
     if not alerts:
         return "📭 No active alerts to check"
+    
     coin_filter = coin.upper().strip() if coin else None
     filtered_alerts = {
         aid: data for aid, data in alerts.items()
         if not coin_filter or data['coin'] == coin_filter
     }
+    
     if not filtered_alerts:
         msg = f"📭 No alerts to check for {coin_filter}" if coin_filter else "📭 No alerts to check"
         return msg
-    exchange = ccxt.binance({'enableRateLimit': True, 'options': {'defaultType': 'spot'}})
+    
     triggered = []
     active = []
     errors = []
+    
     for alert_id, data in filtered_alerts.items():
         pair = f"{data['coin']}/USDT"
-        try:
-            ticker = exchange.fetch_ticker(pair)
-            current_price = ticker.get('last')
-            if current_price is None:
-                errors.append(f"{data['coin']}: Price unavailable")
-                continue
-            prev_price = data.get('last_check_price')
-            data['last_check_price'] = current_price
-            condition = data['condition']
-            target = data['price']
-            is_triggered = False
-            if condition == 'above' and current_price > target:
-                is_triggered = True
-            elif condition == 'below' and current_price < target:
-                is_triggered = True
-            elif condition == 'crosses_above' and prev_price and prev_price <= target < current_price:
-                is_triggered = True
-            elif condition == 'crosses_below' and prev_price and prev_price >= target > current_price:
-                is_triggered = True
-            if is_triggered and not data['triggered']:
-                data['triggered'] = True
-                triggered.append({
-                    'coin': data['coin'],
-                    'condition': condition,
-                    'target': target,
-                    'current': current_price,
-                    'message': data['message'],
-                    'id': alert_id
-                })
-            elif not data['triggered']:
-                active.append({
-                    'coin': data['coin'],
-                    'condition': condition,
-                    'target': target,
-                    'current': current_price
-                })
-        except Exception as e:
-            errors.append(f"{data['coin']}: {str(e)}")
+        
+        # Fetch current price using shared utility
+        ticker_data, error = fetch_ticker(pair)
+        if error:
+            errors.append(f"{data['coin']}: {error}")
+            continue
+        
+        current_price = ticker_data.get('last')
+        if current_price is None:
+            errors.append(f"{data['coin']}: Price unavailable")
+            continue
+        
+        prev_price = data.get('last_check_price')
+        data['last_check_price'] = current_price
+        
+        condition = data['condition']
+        target = data['price']
+        is_triggered = False
+        
+        # Check trigger conditions
+        if condition == 'above' and current_price > target:
+            is_triggered = True
+        elif condition == 'below' and current_price < target:
+            is_triggered = True
+        elif condition == 'crosses_above' and prev_price and prev_price <= target < current_price:
+            is_triggered = True
+        elif condition == 'crosses_below' and prev_price and prev_price >= target > current_price:
+            is_triggered = True
+        
+        if is_triggered and not data['triggered']:
+            data['triggered'] = True
+            triggered.append({
+                'coin': data['coin'],
+                'condition': condition,
+                'target': target,
+                'current': current_price,
+                'message': data['message'],
+                'id': alert_id
+            })
+        elif not data['triggered']:
+            active.append({
+                'coin': data['coin'],
+                'condition': condition,
+                'target': target,
+                'current': current_price
+            })
+    
+    # Update alerts with new check data
     alerts.update(filtered_alerts)
     _save_alerts(alerts)
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    
+    # Format output
+    ts = format_timestamp()
     out = f"🕐 {ts} Alert Check Results\n\n"
+    
     if triggered:
         out += f"🔔 TRIGGERED ALERTS ({len(triggered)}):\n"
         for t in triggered:
             out += f"\n  🚨 {t['coin']}/USDT\n"
-            out += f"     Condition: Price {t['condition']} ${t['target']:,.2f}\n"
-            out += f"     Current Price: ${t['current']:,.2f}\n"
+            out += f"     Condition: Price {t['condition']} ${format_price(t['target'], 2)}\n"
+            out += f"     Current Price: ${format_price(t['current'], 2)}\n"
             out += f"     Message: {t['message']}\n"
             out += f"     ID: {t['id']}\n"
         out += "\n"
+    
     if active:
         out += f"⏳ ACTIVE ALERTS ({len(active)}):\n"
         for a in active:
             diff = ((a['current'] - a['target']) / a['target'] * 100)
-            out += f"  • {a['coin']}: ${a['current']:,.2f} (target {a['condition']} ${a['target']:,.2f}, {diff:+.2f}%)\n"
+            out += f"  • {a['coin']}: ${format_price(a['current'], 2)} (target {a['condition']} ${format_price(a['target'], 2)}, {diff:+.2f}%)\n"
         out += "\n"
+    
     if errors:
         out += f"⚠️ ERRORS ({len(errors)}):\n"
         for err in errors:
             out += f"  • {err}\n"
+    
     if not triggered and not errors:
         out += "✅ All alerts checked, no triggers at this time.\n"
+    
     return out
 
 

@@ -2,10 +2,11 @@
 Smart, modular crypto analysis agent powered by Agno. Fetch real-time market data, run technical analysis, monitor alerts, analyze order flow/volume, and simulate portfolio value — all via natural language or direct tool calls.
 
 ### Highlights
-- Fast real-time data (Binance via CCXT)
-- Modular toolset by domain (market, indicators, analysis, alerts, portfolio)
-- Works with natural language prompts or Python calls
-- Clean outputs optimized for quick decision-making
+- **Fast Real-time Data**: Binance via CCXT with robust retry logic.
+- **High Performance**: In-memory TTL caching for expensive API calls and indicators.
+- **Modular Architecture**: Domain-driven design (market, indicators, analysis, alerts, portfolio) with shared utilities.
+- **Flexible Interface**: Works with natural language prompts or Python calls.
+- **Clean Outputs**: Standardized formatting optimized for quick decision-making.
 
 ## Project Structure
 ```
@@ -17,7 +18,11 @@ server/
   app.py               # AgentOS setup, FastAPI app, serve helper
 tools/
   utils/
-    exchange.py        # Shared CCXT client and OHLCV helpers
+    cache.py           # Caching decorators (TTL)
+    constants.py       # Shared constants and configuration
+    exchange.py        # Shared CCXT client with retry logic
+    formatters.py      # Output formatting helpers
+    helpers.py         # Shared calculation logic (TA, Math)
   market/
     prices.py          # Single/multi price tools
     depth.py           # Orderbook, recent trades
@@ -49,6 +54,12 @@ Or use helper serve (same effect):
 ```bash
 python main.py
 ```
+
+## Architecture & Features
+- **Shared Utilities**: Common logic for indicators (RSI, EMA, etc.) is centralized in `tools/utils/helpers.py` to reduce duplication.
+- **Caching**: Heavy operations like fetching OHLCV data or calculating complex indicators are cached using `@cached` from `tools/utils/cache.py` to improve response times.
+- **Resilience**: Network requests via `tools/utils/exchange.py` include exponential backoff retries to handle API rate limits and transient errors.
+- **Standardization**: All tools use `tools/utils/formatters.py` to ensure consistent output formats (dates, numbers, percentages).
 
 ## Available Tools
 | Tool | Purpose |
@@ -98,56 +109,49 @@ simulate_portfolio_value({"BTC":0.12, "ETH":2.3, "SOL":15})
 ```
 
 ## Natural Language Examples
-You can ask the agent:
-- "Analyze BTC trend with EMA 34/89/200" → triggers `get_ema_set`.
-- "Give me RSI and MACD for ETH on 4h timeframe" → triggers `get_rsi` + `get_macd`.
-- "Compare current SOL price with SMA20 and SMA50" → triggers `get_sma`.
-- "Calculate BTC pivot points for daily timeframe" → triggers `get_pivot_points`.
-- "Find support and resistance zones for ETH" → triggers `get_support_resistance`.
-- "Forecast BTC price for next 10 bars" → triggers `get_forecast`.
-- "Technical analysis summary for BTC" → triggers `get_ta_summary`.
-- "Show BTC volume profile for last 100 hours" → triggers `get_volume_profile`.
-- "Analyze ETH order flow from recent trades" → triggers `get_order_flow`.
-- "Alert me when BTC crosses above $50,000" → triggers `set_price_alert`.
-- "Check all my price alerts" → triggers `check_alerts`.
-- "List my BTC alerts" → triggers `list_alerts`.
-- "Total portfolio value: BTC 0.1, ETH 2, SOL 10" → triggers `simulate_portfolio_value`.
-- "BTC order book top 10 levels" → triggers `get_orderbook`.
+You can interact with the agent using conversational language:
+
+**Market Analysis**
+- "Is BTC in a downtrend on the 4h chart? Check EMA alignment and RSI."
+- "Scan SOL for a potential reversal. Look at MACD divergence and support levels on the 1h."
+- "What's the volume profile for BTC looking like over the last 3 days? Where is the Point of Control?"
+- "Give me a full technical summary for ETH on the daily timeframe."
+
+**Execution & Liquidity**
+- "I'm looking for a scalp entry on ETH. Check the order book depth and recent trade flow."
+- "Analyze the order flow delta for BTC. Are buyers aggressive right now?"
+- "Show me the top 20 levels of the order book for SOL."
+
+**Alerts & Monitoring**
+- "Set a trap for BTC. Alert me if it crosses above $98,000 with a message 'ATH Breakout'."
+- "Monitor ETH for a drop below $2,500. Label it 'Support Failure'."
+- "List all my active price alerts."
+
+**Portfolio & Forecasting**
+- "How much is my portfolio worth? I have 0.5 BTC, 10 ETH, and 500 SOL."
+- "Forecast the price of BNB for the next 12 hours based on the last 200 data points."
 
 ## Playbooks (End-to-End Use Cases)
-- Momentum + Confluence (Swing)
-  1) "Technical analysis summary for BTC 4h" → `get_ta_summary`
-  2) "Show support and resistance zones for BTC 4h" → `get_support_resistance`
-  3) "Daily pivot points for BTC" → `get_pivot_points`
-  4) Optional: "Volume profile BTC 4h" → `get_volume_profile`
-  Use case: Confirm trend bias and key levels before entries.
 
-- Breakout Alert Workflow
-  1) "Set BTC alert above 50000 with message 'breakout watch'" → `set_price_alert`
-  2) On schedule: "Check alerts" → `check_alerts`
-  3) "List alerts for BTC" → `list_alerts`
-  4) "Remove alert <id>" → `remove_alert`
-  Use case: Automate breakout monitoring and reduce screen time.
+### 1. Swing Trade Setup (Trend Following)
+**Goal**: Identify a high-probability trend continuation entry.
+1. **Trend Check**: "Analyze the daily trend for SOL using EMAs and Pivot Points." -> `get_ema_set`, `get_pivot_points`
+2. **Momentum Confirmation**: "Check 4h RSI and MACD for momentum confirmation." -> `get_rsi`, `get_macd`
+3. **Level Finding**: "Identify key support zones to place a stop loss." -> `get_support_resistance`
+4. **Decision**: Enter if price pulls back to support while trend remains bullish.
 
-- Intraday Execution Readiness (Scalps)
-  1) "BTC order book top 20" → `get_orderbook`
-  2) "ETH recent trades 50" → `get_recent_trades`
-  3) "ETH order flow 50" → `get_order_flow`
-  Use case: Evaluate spread, liquidity, and aggressor flow before trade.
+### 2. Scalping the Breakout (High Volatility)
+**Goal**: Catch a rapid price move through a key level.
+1. **Setup**: "Monitor BTC price alerts for a cross above $60,000." -> `set_price_alert`
+2. **Validation (On Alert)**: "Immediately check the order book for sell wall absorption." -> `get_orderbook`
+3. **Confirmation**: "Analyze recent order flow delta to confirm buyer aggression." -> `get_order_flow`
+4. **Execution**: Enter on high buy volume delta; exit quickly if flow stalls.
 
-- Watchlist Health Check
-  1) "Prices for BTC, ETH, SOL, BNB" → `get_multi_prices`
-  2) "EMA 34/89/200 for SOL 1h" → `get_ema_set`
-  3) "RSI for ETH 4h" → `get_rsi`
-  Use case: Fast scan to spot trending or extended markets.
-
-- Portfolio Snapshot
-  1) "Simulate portfolio value: BTC 0.12, ETH 2.3, SOL 15" → `simulate_portfolio_value`
-  Use case: Quick PnL estimates in quote currency (USDT).
-
-- What-If Forecasting (Exploratory)
-  1) "Forecast BTC 1h next 10 bars (train 100)" → `get_forecast`
-  Note: Linear model; treat as directional hint, not a signal.
+### 3. DCA & Portfolio Management
+**Goal**: Passive accumulation and value tracking.
+1. **Valuation**: "What is the current value of 0.1 BTC and 5 ETH?" -> `simulate_portfolio_value`
+2. **Dip Buying**: "Check if BTC is oversold on the daily timeframe (RSI < 30) for a potential DCA entry." -> `get_rsi`
+3. **Health Check**: "Give me a technical summary for BTC to see if the long-term trend is still intact." -> `get_ta_summary`
 
 ## Indicator Interpretation Hints
 - **EMA alignment**: Price above all EMAs suggests strong uptrend; below indicates downtrend.

@@ -4,7 +4,6 @@ uvicorn
 httpx
 
 # Frontend / UI
-reflex
 textual[syntax]
 
 # Trading / Charts
@@ -28,5 +27,4 @@ pinecone
 
 # Database drivers (choose ONE psycopg variant)
 psycopg[binary]  # Modern psycopg (v3) binary wheels
-# psycopg2-binary  # Legacy; remove if using psycopg above
 asyncpg  # For async PostgreSQL access

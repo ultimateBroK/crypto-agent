@@ -1,15 +1,19 @@
 from datetime import datetime
 import numpy as np
-from tools.utils.exchange import EXCHANGE
+from typing import Optional
+from tools.utils.exchange import fetch_ohlcv
+from tools.utils.nlp import resolve_timeframe
 
 
-def get_support_resistance(coin: str, timeframe: str = '1h', lookback: int = 100, **kwargs):
+def get_support_resistance(coin: str, timeframe: Optional[str] = None, lookback: int = 100, **kwargs):
     """Identify recent support/resistance zones using local highs/lows."""
     pair = f"{coin.upper().strip()}/USDT"
-    try:
-        ohlcv = EXCHANGE.fetch_ohlcv(pair, timeframe=timeframe, limit=lookback)
-    except Exception as e:
-        return f"❌ Error OHLCV {pair}: {e}"
+    # Resolve timeframe from kwargs/prompt, honoring natural-language hints
+    timeframe, tf_reason = resolve_timeframe(timeframe, return_reason=True, **kwargs)
+
+    ohlcv, error = fetch_ohlcv(pair, timeframe=timeframe, limit=lookback)
+    if error:
+        return error
     
     if len(ohlcv) < 20:
         return f"⚠️ Not enough data for {pair}"
@@ -69,6 +73,8 @@ Resistance Zones (above price):
     else:
         out += "  None detected\n"
     
+    if tf_reason:
+        out += f"\n⚠️ Note: {tf_reason}"
     return out
 
 

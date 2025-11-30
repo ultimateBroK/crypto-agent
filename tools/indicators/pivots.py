@@ -1,10 +1,13 @@
 from datetime import datetime
+from typing import Optional
 from tools.utils.exchange import EXCHANGE
+from tools.utils.nlp import resolve_timeframe
 
 
-def get_pivot_points(coin: str, timeframe: str = '1d', pivot_type: str = 'traditional', **kwargs):
+def get_pivot_points(coin: str, timeframe: Optional[str] = None, pivot_type: str = 'traditional', **kwargs):
     """Calculate pivot points (support/resistance levels) for the coin."""
     pair = f"{coin.upper().strip()}/USDT"
+    timeframe, tf_reason = resolve_timeframe(timeframe, default='1d', return_reason=True, **kwargs)
     try:
         ohlcv = EXCHANGE.fetch_ohlcv(pair, timeframe=timeframe, limit=2)
     except Exception as e:
@@ -76,6 +79,8 @@ Support Levels:
     else:
         out += f"\n💡 Price between S1-R1 (neutral)"
     
+    if tf_reason:
+        out += f"\n⚠️ {tf_reason}"
     return out
 
 

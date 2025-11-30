@@ -1,15 +1,19 @@
 from datetime import datetime
 from collections import defaultdict
-from tools.utils.exchange import EXCHANGE
+from typing import Optional
+from tools.utils.exchange import fetch_ohlcv
+from tools.utils.nlp import resolve_timeframe
 
 
-def get_volume_profile(coin: str, timeframe: str = '1h', lookback: int = 100, num_levels: int = 20, **kwargs):
+def get_volume_profile(coin: str, timeframe: Optional[str] = None, lookback: int = 100, num_levels: int = 20, **kwargs):
     """Calculate Volume Profile - distribution of volume across price levels."""
     pair = f"{coin.upper().strip()}/USDT"
-    try:
-        ohlcv = EXCHANGE.fetch_ohlcv(pair, timeframe=timeframe, limit=lookback)
-    except Exception as e:
-        return f"❌ Error OHLCV {pair}: {e}"
+    # Resolve timeframe from kwargs/prompt, honoring natural-language hints
+    timeframe, tf_reason = resolve_timeframe(timeframe, return_reason=True, **kwargs)
+
+    ohlcv, error = fetch_ohlcv(pair, timeframe=timeframe, limit=lookback)
+    if error:
+        return error
     
     if len(ohlcv) < 10:
         return f"⚠️ Not enough data for {pair}"
@@ -110,6 +114,8 @@ Volume at POC: {poc_volume:,.0f} ({(poc_volume/total_volume*100):.1f}%)
 
 💡 Price Position: {position}
 """
+    if tf_reason:
+        out += f"\n⚠️ Note: {tf_reason}"
     return out
 
 
