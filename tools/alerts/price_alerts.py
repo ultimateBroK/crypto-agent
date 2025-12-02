@@ -58,7 +58,7 @@ def set_price_alert(coin: str, condition: str, price: float, message: str = "", 
         'condition': condition,
         'price': price,
         'message': message or f"{coin_upper} price {condition} {price}",
-        'created_at': datetime.utcnow().isoformat(),
+        'created_at': datetime.now().isoformat(),
         'triggered': False,
         'last_check_price': None
     }
@@ -91,9 +91,9 @@ def list_alerts(coin: str = None, **kwargs):
         if not coin_filter or data['coin'] == coin_filter
     }
     if not filtered_alerts:
-        msg = f"📭 No active alerts for {coin_filter}" if coin_filter else "📭 No active alerts"
+        msg = f"📝 No active alerts for {coin_filter}" if coin_filter else "📝 No active alerts"
         return msg
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
     out = f"🕐 {ts} Active Price Alerts\n"
     if coin_filter:
         out += f"Filtered by: {coin_filter}\n"

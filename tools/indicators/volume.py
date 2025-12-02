@@ -86,7 +86,7 @@ def get_volume_profile(coin: str, timeframe: Optional[str] = None, lookback: int
     val_price = price_min + (val_level + 0.5) * level_size
     
     current_price = closes[-1]
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
     
     if current_price > vah_price:
         position = "Above Value Area (bullish)"

@@ -6,7 +6,7 @@ def simulate_portfolio_value(holdings: dict, quote: str = 'USDT', **kwargs):
     """Compute portfolio current value given coin:amount mapping (spot)."""
     if not holdings:
         return "⚠️ Provide holdings mapping {coin: amount}."
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
     lines = [f"🧾 Portfolio Value ({quote})", f"🕐 {ts}"]
     total = 0.0
     for coin, amount in holdings.items():

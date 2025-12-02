@@ -2,8 +2,6 @@
 Shared helper functions for technical analysis calculations.
 """
 from typing import List, Optional
-import numpy as np
-
 
 def sma(data: List[float], period: int) -> Optional[float]:
     """Calculate Simple Moving Average."""
@@ -95,7 +93,7 @@ def stoch_k(highs: List[float], lows: List[float], closes: List[float],
     if hh == ll:
         return 50.0
     raw_k = (closes[-1] - ll) / (hh - ll) * 100.0
-    # Simple smoothing - in production, you'd calculate SMA of raw_k values
+    # Simple smoothing - in production, you'd calculate SMA of raw_k values`
     return raw_k
 
 

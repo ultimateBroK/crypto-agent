@@ -2,7 +2,7 @@
 Smart, modular crypto analysis agent powered by Agno. Fetch real-time market data, run technical analysis, monitor alerts, analyze order flow/volume, and simulate portfolio value — all via natural language or direct tool calls.
 
 ### Highlights
-- **Fast Real-time Data**: Binance via CCXT with robust retry logic.
+- **Fast Real-time Data**: Gate via CCXT with robust retry logic.
 - **High Performance**: In-memory TTL caching for expensive API calls and indicators.
 - **Modular Architecture**: Domain-driven design (market, indicators, analysis, alerts, portfolio) with shared utilities.
 - **Flexible Interface**: Works with natural language prompts or Python calls.

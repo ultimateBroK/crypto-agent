@@ -72,3 +72,6 @@ trade_logs/
 
 # Testing outputs
 tests/
+
+# Documentation
+docs/

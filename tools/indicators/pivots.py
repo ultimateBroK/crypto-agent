@@ -55,7 +55,7 @@ def get_pivot_points(coin: str, timeframe: Optional[str] = None, pivot_type: str
     else:
         return f"⚠️ Unknown pivot type: {pivot_type}"
     
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
     current = ohlcv[-1][4]
     
     out = f"""🕐 {ts} Pivot Points {pair} ({pivot_type.title()})

@@ -50,7 +50,7 @@ def get_support_resistance(coin: str, timeframe: Optional[str] = None, lookback:
     sup_clustered = cluster_levels(support_levels)
     
     current_price = ohlcv[-1][4]
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
     
     out = f"""🕐 {ts} Support/Resistance {pair}
 Timeframe: {timeframe} | Lookback: {lookback} bars

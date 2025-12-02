@@ -38,7 +38,7 @@ def get_forecast(coin: str, timeframe: Optional[str] = None, train_len: int = 10
     residuals = closes - y_pred
     std_dev = np.std(residuals)
     
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
     current_price = closes[-1]
     forecast_end = forecast_vals[-1]
     change_pct = (forecast_end - current_price) / current_price * 100

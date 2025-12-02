@@ -396,7 +396,7 @@ def get_ta_summary(coin: str, timeframe: Optional[str] = None, **kwargs) -> str:
     )
     
     # Format output
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
     
     # Get RSI status
     rsi_val = osc_results.get('rsi', 0)
@@ -903,7 +903,7 @@ Key Indicators:
     else:
         overall = "NEUTRAL"
     
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
     
     out = f"""🕐 {ts} Technical Analysis Summary {pair}
 Timeframe: {timeframe}

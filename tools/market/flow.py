@@ -62,7 +62,7 @@ def get_order_flow(coin: str, limit: int = 50, **kwargs):
     avg_buy_size = buy_volume / buy_count if buy_count > 0 else 0
     avg_sell_size = sell_volume / sell_count if sell_count > 0 else 0
     
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
     
     out = f"""🕐 {ts} Order Flow Analysis {pair}
 Recent Trades: {total_count} ({limit} requested)

@@ -9,7 +9,7 @@ from tools.utils.formatters import format_timestamp, format_price, format_percen
 
 def get_crypto_price(coin: str, **kwargs) -> str:
     """
-    Fetch REAL-TIME price data of a SINGLE cryptocurrency from Binance.
+    Fetch REAL-TIME price data of a SINGLE cryptocurrency from Gate.
     
     Args:
         coin: Cryptocurrency symbol (e.g., 'BTC', 'ETH', 'XRP')
@@ -29,9 +29,11 @@ def get_crypto_price(coin: str, **kwargs) -> str:
     # Use shared fetch_ticker utility
     ticker, error = fetch_ticker(trading_pair)
     if error:
-        return f"{error}\n\nReasoning: Failed to fetch ticker data from Binance exchange."
+        return f"{error}\n\nReasoning: Failed to fetch ticker data from Gate exchange."
     
-    # Extract ticker data
+    # Extract ticker data (guard against missing/invalid ticker)
+    if not ticker or not isinstance(ticker, dict):
+        return f"⚠️ Could not retrieve ticker data for {trading_pair}.\n\nReasoning: fetch_ticker returned no data or an unexpected response."
     ticker_timestamp = ticker.get('timestamp')
     price = ticker.get('last')
     high_24h = ticker.get('high')
@@ -66,7 +68,7 @@ def get_crypto_price(coin: str, **kwargs) -> str:
             time_str = fetch_timestamp.strftime("%Y-%m-%d %H:%M:%S UTC")
         
         # Build response
-        response = f"""📊 {coin_upper} Price Analysis (Binance)
+        response = f"""📊 {coin_upper} Price Analysis (Gate)
 🕐 Data Fetched: {time_str} (Real-Time)
 
 💰 Current Price: ${format_price(price, 2)} USDT
@@ -110,8 +112,8 @@ def get_crypto_price(coin: str, **kwargs) -> str:
                 else:
                     response += "\n   • Current price is in the middle range of the 24h trading band."
         
-        response += f"\n\n✅ Data Source: Binance Exchange (Real-Time) | Trading Pair: {trading_pair}"
-        response += "\n🔄 Note: This data is fetched fresh from Binance exchange in real-time. No cached data is used."
+        response += f"\n\n✅ Data Source: Gate Exchange (Real-Time) | Trading Pair: {trading_pair}"
+        response += "\n🔄 Note: This data is fetched fresh from Gate exchange in real-time. No cached data is used."
         
         return response
     else:
@@ -142,7 +144,7 @@ def get_multi_prices(coins: str, **kwargs) -> str:
         pair = f"{coin_symbol}/USDT"
         ticker, error = fetch_ticker(pair)
         
-        if error:
+        if error or not ticker or not isinstance(ticker, dict):
             results.append(f"❌ {coin_symbol}: Failed to fetch")
             continue
         
@@ -156,20 +158,4 @@ def get_multi_prices(coins: str, **kwargs) -> str:
             results.append(f"⚠️ {coin_symbol}: Price unavailable")
     
     return '\n'.join(results)
-
-
-def get_multi_prices(coins: list, **kwargs):
-    """Return current prices for multiple coin symbols (USDT)."""
-    ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
-    out = [f"🕐 {ts} Real-Time Prices"]
-    for coin in coins:
-        pair = f"{coin.upper().strip()}/USDT"
-        try:
-            ticker = EXCHANGE.fetch_ticker(pair)
-            price = ticker.get('last')
-            out.append(f"{coin.upper():<6}: {price:.6f} USDT")
-        except Exception as e:
-            out.append(f"{coin.upper():<6}: ERR {e}")
-    return '\n'.join(out)
-
 

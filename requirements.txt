@@ -1,30 +1,34 @@
 # Core web stack
-fastapi
-uvicorn
-httpx
+fastapi  # FastAPI framework for building APIs
+uvicorn  # ASGI server for running FastAPI applications
+httpx    # HTTP client for making requests
 
 # Frontend / UI
-textual[syntax]
+textual[syntax]  # Text-based UI framework
 
 # Trading / Charts
-ccxt
-lightweight-charts
+ccxt  # Cryptocurrency trading library
+lightweight-charts  # Lightweight charting library for financial data
 
 # Data & Utils
-polars
-python-dotenv
+numpy  # Numerical computing library
+polars  # DataFrame library for fast data manipulation
+python-dotenv  # Load environment variables from .env files
 
 # AI / LLM
-agno
-google-genai
-ollama
+agno  # Framework for building AI agents
+google-genai  # Google’s Generative AI library
+ollama  # Library for working with language models
+
+# Testing
+pytest  # Testing framework for Python
 
 # Indicators / Quant
-ta-lib  # Requires system-level TA-Lib installed
+ta-lib  # Technical Analysis library for financial data
 
 # Vector / Search
-pinecone
+pinecone  # Vector database for similarity search
 
-# Database drivers (choose ONE psycopg variant)
-psycopg[binary]  # Modern psycopg (v3) binary wheels
-asyncpg  # For async PostgreSQL access
+# Database / Time-series
+questdb[dataframe]  # QuestDB for time-series data (OHLCV, indicators, order flow)
+asyncpg  # Async PostgreSQL driver for Neon/PostgreSQL (trade demo, portfolios, users)

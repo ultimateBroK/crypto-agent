@@ -13,8 +13,8 @@ from tools.utils.constants import (
 )
 
 
-# Shared CCXT Binance client (spot)
-EXCHANGE = ccxt.binance({
+# Shared CCXT Gate client (spot)
+EXCHANGE = ccxt.gate({
     'enableRateLimit': True, 
     'options': {'defaultType': 'spot'},
     'timeout': 30000,  # 30 second timeout
@@ -62,7 +62,8 @@ def fetch_ohlcv_cached(pair: str, timeframe: str, limit: int) -> List[List[float
     def _fetch():
         return EXCHANGE.fetch_ohlcv(pair, timeframe=timeframe, limit=limit)
     
-    return retry_on_error(_fetch)
+    result = retry_on_error(_fetch)
+    return result if result is not None else []
 
 
 def fetch_ohlcv(pair: str, timeframe: str = '1h', limit: int = DEFAULT_OHLCV_LIMIT, 
@@ -107,8 +108,6 @@ def fetch_ohlcv(pair: str, timeframe: str = '1h', limit: int = DEFAULT_OHLCV_LIM
         return None, f"❌ Invalid trading pair: {pair} not found on exchange"
     except ccxt.NetworkError as e:
         return None, f"❌ Network error fetching {pair}: {str(e)}"
-    except ccxt.ExchangeNotAvailable as e:
-        return None, f"❌ Exchange temporarily unavailable: {str(e)}"
     except ccxt.BaseError as e:
         return None, f"❌ Exchange error for {pair}: {str(e)}"
     except Exception as e:
@@ -159,7 +158,20 @@ def fetch_ticker(pair: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
             return EXCHANGE.fetch_ticker(pair)
         
         ticker = retry_on_error(_fetch)
-        return ticker, None
+        if not ticker:
+            return None, f"⚠️ No ticker data returned for {pair}"
+
+        # Convert ccxt Ticker (mapping-like) into a plain dict for typing compatibility
+        try:
+            ticker_dict = dict(ticker)
+        except Exception:
+            if hasattr(ticker, "items"):
+                ticker_dict = {k: v for k, v in ticker.items()}
+            else:
+                # Fallback: wrap raw object in a dict under key 'raw'
+                ticker_dict = {"raw": ticker}
+
+        return ticker_dict, None
         
     except ccxt.BadSymbol:
         return None, f"❌ Invalid trading pair: {pair} not found on exchange"
@@ -171,7 +183,7 @@ def fetch_ticker(pair: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
         return None, f"❌ Unexpected error fetching {pair}: {str(e)}"
 
 
-def invalidate_cache(pair: str = None):
+def invalidate_cache(pair: Optional[str] = None):
     """
     Invalidate cache for specific pair or all cached data.
     

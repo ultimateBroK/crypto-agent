@@ -30,7 +30,7 @@ def get_recent_trades(coin: str, limit: int = 10, **kwargs):
     pair = f"{coin_sym}/USDT"
     try:
         trades = EXCHANGE.fetch_trades(pair, limit=limit)
-        ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')
         lines = []
         for t in trades[:limit]:
             side = t.get('side')
