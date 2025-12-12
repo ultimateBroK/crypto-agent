@@ -5,6 +5,7 @@ from config.settings import MODEL_ID, AGENT_DESCRIPTION
 from tools.market.prices import get_crypto_price, get_multi_prices
 from tools.market.depth import get_orderbook, get_recent_trades
 from tools.market.flow import get_order_flow
+from tools.market.killzones import get_ict_killzones
 from tools.indicators.moving_averages import get_sma, get_ema_set
 from tools.indicators.momentum import get_rsi, get_macd
 from tools.indicators.pivots import get_pivot_points
@@ -26,6 +27,7 @@ def create_agent() -> Agent:
             get_multi_prices,
             get_orderbook,
             get_recent_trades,
+            get_ict_killzones,
             get_sma,
             get_ema_set,
             get_rsi,

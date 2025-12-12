@@ -78,6 +78,7 @@ python main.py
 | `get_ta_summary(coin, timeframe)` | Composite TA signal (oscillators+MAs+pivots) |
 | `get_volume_profile(coin, timeframe, lookback, num_levels)` | POC, VAH, VAL volume distribution analysis |
 | `get_order_flow(coin, limit)` | Buy/sell aggressor volume and order flow delta |
+| `get_ict_killzones(date_yyyy_mm_dd, timezone, reference_timezone, profile)` | Show ICT Killzones (Asia/London/NY) converted to your timezone |
 | `set_price_alert(coin, condition, price, message)` | Create price threshold alert |
 | `list_alerts(coin)` | List all active price alerts |
 | `remove_alert(alert_id)` | Remove specific price alert |
@@ -99,6 +100,7 @@ get_forecast("SOL", timeframe="1h", train_len=100, forecast_len=10)
 get_ta_summary("BTC", timeframe="1h")
 get_volume_profile("BTC", timeframe="1h", lookback=100, num_levels=20)
 get_order_flow("ETH", limit=50)
+get_ict_killzones(date_yyyy_mm_dd="2025-12-12", timezone="UTC")
 set_price_alert("BTC", condition="above", price=50000, message="BTC breakout!")
 list_alerts()
 list_alerts(coin="BTC")
@@ -152,6 +154,13 @@ You can interact with the agent using conversational language:
 1. **Valuation**: "What is the current value of 0.1 BTC and 5 ETH?" -> `simulate_portfolio_value`
 2. **Dip Buying**: "Check if BTC is oversold on the daily timeframe (RSI < 30) for a potential DCA entry." -> `get_rsi`
 3. **Health Check**: "Give me a technical summary for BTC to see if the long-term trend is still intact." -> `get_ta_summary`
+
+### 4. ICT Killzone Liquidity Sweep (Scalp Timing)
+**Goal**: Use ICT Killzones as a timing filter for liquidity/volatility.
+1. **Timing**: "Show me today's ICT Killzones in UTC." -> `get_ict_killzones`
+2. **Setup Context**: "During the London Kill Zone, check BTC EMA alignment (1h) and key pivots (1d)." -> `get_ema_set`, `get_pivot_points`
+3. **Liquidity + Reaction**: "If price sweeps a prior high/low in a killzone, confirm with order flow delta and orderbook." -> `get_order_flow`, `get_orderbook`
+4. **Risk**: Prefer tight invalidation around the sweep level; avoid forcing trades outside killzones unless trend is strong.
 
 ## Indicator Interpretation Hints
 - **EMA alignment**: Price above all EMAs suggests strong uptrend; below indicates downtrend.
